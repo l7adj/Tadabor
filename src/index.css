@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'KFGQPC Uthmanic Script HAFS';
+  src: url('/fonts/UthmanicHafs.woff2') format('woff2'),
+       url('/fonts/kfgqpc_hafs.woff2') format('woff2'),
+       url('https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+@layer base {
+  body { font-family: 'Cairo', system-ui, -apple-system, sans-serif; }
+}
+
+.font-quran,
+.font-quran-reading,
+.font-amiri {
+  font-family: 'KFGQPC Uthmanic Script HAFS', 'Scheherazade New', 'Amiri Quran', 'Amiri', serif;
+  font-feature-settings: "cv01" on, "cv02" on, "calt" on, "liga" on, "dlig" on, "mkmk" on, "mark" on;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.font-quran-reading { word-spacing: 0.12em; }
+
+.quran-highlight { background-color: #fef08a; color: #1c1917; border-radius: 4px; padding: 0 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; border-bottom: 2px solid #eab308; }
+.quran-highlight-exact { background-color: #bbf7d0; color: #064e3b; border-radius: 4px; padding: 0 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; border-bottom: 2px solid #22c55e; }
+.quran-highlight-ortho { background-color: #e0e7ff; color: #1e1b4b; border-radius: 4px; padding: 0 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; border-bottom: 2px solid #6366f1; }
+.quran-highlight-clitic { background-color: #fed7aa; color: #7c2d12; border-radius: 4px; padding: 0 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; border-bottom: 2px solid #f97316; }
+
+.ayah-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'KFGQPC Uthmanic Script HAFS', 'Amiri Quran', 'Amiri', serif;
+  color: #065f46;
+  font-size: 0.9em;
+  margin: 0 0.25rem;
+  user-select: none;
+}
