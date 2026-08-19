@@ -1,30 +1,30 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>تدبّر — محرك البحث</title>
 <style>
-body{font-family:system-ui,sans-serif;background:#faf9f6;color:#292524;margin:0}main{max-width:900px;margin:auto;padding:24px 14px}h1{text-align:center}.search{width:100%;box-sizing:border-box;padding:14px 16px;font-size:20px;border:1px solid #d6d3d1;border-radius:12px;background:white;outline:none}.meta{font-size:13px;color:#78716c;margin:12px 2px}.result{background:white;border:1px solid #e7e5e4;border-radius:12px;padding:16px;margin:10px 0}.ayah{font-family:"Amiri",serif;font-size:24px;line-height:2.1}.ref{font-size:12px;color:#78716c;margin-top:8px}.mark{background:#dcfce7;border-radius:3px}.error{background:#fff7ed;padding:12px;border-radius:10px;color:#9a3412}.loading{color:#78716c;text-align:center;padding:25px}
-</style>
-</head>
+body{font-family:system-ui,sans-serif;background:#faf9f6;color:#292524;margin:0}main{max-width:900px;margin:auto;padding:24px 14px}
+h1{text-align:center;margin:0 0 14px}.search{width:100%;box-sizing:border-box;padding:14px 16px;font-size:20px;border:1px solid #d6d3d1;border-radius:12px;background:white;outline:none}
+.meta{font-size:13px;color:#78716c;margin:12px 2px}.result{background:white;border:1px solid #e7e5e4;border-radius:12px;padding:16px;margin:10px 0}
+.ayah{font-family:"Amiri",serif;font-size:24px;line-height:2.1}.ref{font-size:12px;color:#78716c;margin-top:8px}.mark{background:#dcfce7;border-radius:3px}.error{background:#fff7ed;padding:12px;border-radius:10px;color:#9a3412}.loading{color:#78716c;text-align:center;padding:25px}
+</style></head>
 <body><main>
 <h1>تدبّر</h1>
-<input id="q" class="search" autocomplete="off" placeholder="اكتب ما تبحث عنه…">
+<input id="q" class="search" autocomplete="off" inputmode="text" placeholder="اكتب ما تبحث عنه…">
 <div id="meta" class="meta"></div><div id="results"><div class="loading">جاري تحميل نص القرآن…</div></div>
 <script>
 const UTHMANI='https://raw.githubusercontent.com/dotquran/corpus/main/processed/uthmani/quran-uthmani.json';
 const SIMPLE='https://raw.githubusercontent.com/dotquran/corpus/main/processed/simple-clean/quran-simple-clean.json';
-const ALIF={'أ':'ا','إ':'ا','آ':'ا','ٱ':'ا','ا':'ا'};
-const IGN=/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/u;
-function norm(s){s=(s||'').normalize('NFC');let o='';for(const c of s){if(IGN.test(c))continue;o+=ALIF[c]??c}return o.replace(/\s+/g,' ').trim()}
-let corpus=[];
-function flatten(x){if(Array.isArray(x))return x; if(x?.surahs)return x.surahs; return []}
-function makeCorpus(u,s){const out=[];const us=flatten(u),ss=flatten(s);for(let i=0;i<us.length;i++){const su=us[i],ssu=ss[i];const ua=su.ayahs||[],sa=ssu?.ayahs||[];for(let j=0;j<ua.length;j++){const a=ua[j],b=sa[j];out.push({surah:su.number,ayah:a.number,text:a.text,search:b?.text?norm(b.text):norm(a.text)})}}return out}
+const DIAC=/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/u;
+function norm(s){return (s||'').normalize('NFC').replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/gu,'').replace(/[أإآٱ]/g,'ا').replace(/\s+/g,' ').trim()}
 function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function highlight(text,q){const nq=norm(q);if(!nq)return esc(text);let plain='',map=[];for(let i=0;i<text.length;i++){const c=text[i];if(IGN.test(c))continue;plain+=ALIF[c]??c;map.push(i)}let at=plain.indexOf(nq);if(at<0)return esc(text);const a=map[at],z=map[at+nq.length-1]+1;return esc(text.slice(0,a))+'<span class="mark">'+esc(text.slice(a,z))+'</span>'+esc(text.slice(z))}
-function search(q){const nq=norm(q);if(!nq)return[];const r=[];for(const a of corpus){let p=0,c=0;while((p=a.search.indexOf(nq,p))!==-1){c++;p+=Math.max(1,nq.length)}if(c)r.push({...a,count:c})}return r}
-const q=document.getElementById('q'),results=document.getElementById('results'),meta=document.getElementById('meta');
-q.addEventListener('input',()=>{const raw=q.value;const r=search(raw);meta.textContent=raw.trim()?`${r.length} آية مطابقة`:'';results.innerHTML=r.slice(0,100).map(a=>`<article class="result"><div class="ayah">${highlight(a.text,raw)}</div><div class="ref">سورة ${a.surah} — الآية ${a.ayah}</div></article>`).join('')|| (raw.trim()?'لا توجد مطابقة.':'')});
-Promise.all([fetch(UTHMANI).then(r=>r.json()),fetch(SIMPLE).then(r=>r.json())]).then(([u,s])=>{corpus=makeCorpus(u,s);results.innerHTML='';meta.textContent='جاهز — 6236 آية'}).catch(e=>{results.innerHTML='<div class="error">تعذر تحميل نص القرآن. افتح الصفحة مع اتصال بالإنترنت.</div>';console.error(e)});
+let corpus=[];
+function makeCorpus(u,s){const out=[];for(let i=0;i<u.surahs.length;i++){const us=u.surahs[i],ss=s.surahs[i];const sa=ss?.ayahs||[];for(let j=0;j<us.ayahs.length;j++){const ua=us.ayahs[j],simple=sa[j]?.text||ua.text;out.push({surah:us.number,name:us.name,ayah:ua.number,global:out.length+1,uthmani:ua.text,simple,words:simple.split(/\s+/)})}}return out}
+function highlightWord(word,q){const n=norm(word),at=n.indexOf(q);if(at<0)return esc(word);let plain='',map=[];for(let i=0;i<word.length;i++){const c=word[i];if(DIAC.test(c))continue;plain+=/[أإآٱ]/.test(c)?'ا':c;map.push(i)}const a=map[at],z=map[at+q.length-1]+1;return esc(word.slice(0,a))+'<span class="mark">'+esc(word.slice(a,z))+'</span>'+esc(word.slice(z))}
+function renderAyah(a,q){const nq=norm(q);const uw=a.uthmani.split(/(\s+)/);const sw=a.simple.split(/(\s+)/);return uw.map((token,i)=>{if(/^\s+$/.test(token))return token;const st=sw[i]||'';return norm(st).includes(nq)?highlightWord(token,nq):esc(token)}).join('')}
+function search(raw){const q=norm(raw);if(!q)return[];const phrase=q.includes(' ');const hits=[];for(const a of corpus){if(phrase){if(norm(a.simple).includes(q))hits.push({...a,score:100});continue}let score=0;for(const w of a.words){if(norm(w)===q){score=100;break}if(norm(w).includes(q))score=Math.max(score,90)}if(score)hits.push({...a,score})}return hits.sort((a,b)=>b.score-a.score||a.global-b.global)}
+const input=document.getElementById('q'),results=document.getElementById('results'),meta=document.getElementById('meta');
+input.addEventListener('input',()=>{const raw=input.value,r=search(raw);if(!raw.trim()){meta.textContent='';results.innerHTML='';return}meta.textContent=`${r.length} آية مطابقة`;results.innerHTML=r.slice(0,100).map(a=>`<article class="result"><div class="ayah">${renderAyah(a,raw)}</div><div class="ref">سورة ${a.surah} (${esc(a.name)}) — الآية ${a.ayah}</div></article>`).join('')||'لا توجد مطابقة.'});
+Promise.all([fetch(UTHMANI).then(r=>{if(!r.ok)throw Error('uthmani');return r.json()}),fetch(SIMPLE).then(r=>{if(!r.ok)throw Error('simple');return r.json()})]).then(([u,s])=>{corpus=makeCorpus(u,s);meta.textContent=`جاهز — ${corpus.length} آية`}).catch(e=>{results.innerHTML='<div class="error">تعذر تحميل نص القرآن. افتح الصفحة مع اتصال بالإنترنت.</div>';console.error(e)});
 </script></main></body></html>
