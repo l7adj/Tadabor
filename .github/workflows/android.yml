@@ -16,8 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 1
+
+      - name: Fetch pinned Hafs Mushaf source
+        run: |
+          rm -rf vendor/quran-svg
+          git clone --depth 1 --branch main https://github.com/quranpedia/quran-svg.git vendor/quran-svg
+          test "$(git -C vendor/quran-svg rev-parse HEAD)" = "5fbcb1d4d92b5a2972ab51472fe991b6066bb6e2"
+          test -f vendor/quran-svg/mushafs/hafs/kfqc/svg/001.svg
+          test -f vendor/quran-svg/mushafs/hafs/kfqc/svg/604.svg
 
       - uses: actions/setup-node@v4
         with:
@@ -34,9 +41,6 @@ jobs:
 
       - name: Verify offline sources
         run: npm run offline:check
-
-      - name: Verify local Hafs Mushaf source
-        run: test -f vendor/quran-svg/mushafs/hafs/kfqc/svg/001.svg
 
       - name: Generate Android project
         run: npx cap add android
