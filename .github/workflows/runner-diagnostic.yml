@@ -1,0 +1,23 @@
+name: Tadabor Runner Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create diagnostic marker
+        run: |
+          node --version
+          java -version
+          printf 'runner-ok\n' > runner-diagnostic.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tadabor-runner-diagnostic
+          path: runner-diagnostic.txt
