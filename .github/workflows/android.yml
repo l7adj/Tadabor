@@ -13,18 +13,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
       - name: Verify offline sources
         run: npm run offline:check
+
       - name: Generate Android project
         run: npx cap add android
+
       - name: Build web assets and sync
         run: npm run mobile:prepare
+
       - name: Remove network permission
         run: |
           python3 - <<'PY'
@@ -32,11 +45,21 @@ jobs:
           p = Path('android/app/src/main/AndroidManifest.xml')
           text = p.read_text()
           text = text.replace('    <uses-permission android:name="android.permission.INTERNET" />\n', '')
+          text = text.replace('<uses-permission android:name="android.permission.INTERNET" />\n', '')
           p.write_text(text)
           PY
+
+      - name: Verify Android manifest is offline-only
+        run: |
+          if grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml; then
+            echo 'INTERNET permission is still present'
+            exit 1
+          fi
+
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
           name: tadabor-debug-apk
