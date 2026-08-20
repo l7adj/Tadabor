@@ -10,46 +10,61 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 1
+      - name: Download repository snapshot
+        run: |
+          rm -rf tadabor-src
+          curl -fsSL "https://github.com/l7adj/Tadabor/archive/${SOURCE_SHA}.tar.gz" -o tadabor.tar.gz
+          tar -xzf tadabor.tar.gz
+          mv "Tadabor-${SOURCE_SHA}" tadabor-src
+          cd tadabor-src
+          git init -q
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+      - name: Print runner toolchain
+        working-directory: tadabor-src
+        run: |
+          node --version
+          npm --version
+          java -version
+          git --version
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: gradle
+      - name: Fetch pinned Hafs Mushaf source
+        working-directory: tadabor-src
+        run: |
+          rm -rf vendor/quran-svg
+          git clone --depth 1 --branch main https://github.com/quranpedia/quran-svg.git vendor/quran-svg
+          test "$(git -C vendor/quran-svg rev-parse HEAD)" = "5fbcb1d4d92b5a2972ab51472fe991b6066bb6e2"
+          test -f vendor/quran-svg/mushafs/hafs/kfqc/svg/001.svg
+          test -f vendor/quran-svg/mushafs/hafs/kfqc/svg/604.svg
 
       - name: Install dependencies
+        working-directory: tadabor-src
         run: npm install --no-audit --no-fund
 
       - name: Verify offline sources
+        working-directory: tadabor-src
         run: npm run offline:check
 
-      - name: Verify local Hafs Mushaf source
-        run: test -f vendor/quran-svg/mushafs/hafs/kfqc/svg/001.svg
-
       - name: Generate Android project
+        working-directory: tadabor-src
         run: npx cap add android
 
       - name: Build web assets and sync
+        working-directory: tadabor-src
         run: npm run mobile:prepare
 
       - name: Verify bundled Mushaf pages
+        working-directory: tadabor-src
         run: test -f dist/mushaf-svg/001.svg && test -f dist/mushaf-svg/604.svg
 
       - name: Remove network permission
+        working-directory: tadabor-src
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -61,6 +76,7 @@ jobs:
           PY
 
       - name: Verify Android manifest is offline-only
+        working-directory: tadabor-src
         run: |
           if grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml; then
             echo 'INTERNET permission is still present'
@@ -68,11 +84,11 @@ jobs:
           fi
 
       - name: Build debug APK
-        working-directory: android
+        working-directory: tadabor-src/android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: tadabor-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: tadabor-src/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
