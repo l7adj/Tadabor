@@ -1,0 +1,1 @@
+Temporary CI validation marker. The Android build workflow validates the current main branch and is triggered on pull requests.
