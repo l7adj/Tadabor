@@ -1,1 +1,1 @@
-Temporary CI validation marker. The Android build workflow validates the current main branch and is triggered on pull requests.
+CI validation trigger: Android APK build must pass on pull requests before this project is considered installable.
