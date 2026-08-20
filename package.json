@@ -1,0 +1,19 @@
+{
+  "name": "tadabor",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "offline:check": "node scripts/check-offline.mjs",
+    "mobile:prepare": "npm run build && npx cap sync android",
+    "android:build": "npm run mobile:prepare && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0"
+  }
+}
