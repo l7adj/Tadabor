@@ -1,0 +1,3 @@
+[submodule "vendor/quran-svg"]
+	path = vendor/quran-svg
+	url = https://github.com/quranpedia/quran-svg.git
