@@ -1,1 +1,0 @@
-CI validation trigger: Android APK build must pass on pull requests before this project is considered installable.
