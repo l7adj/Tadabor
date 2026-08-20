@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -17,9 +20,9 @@ jobs:
       - name: Download repository snapshot
         run: |
           rm -rf tadabor-src
-          curl -fsSL "https://github.com/l7adj/Tadabor/archive/${GITHUB_SHA}.tar.gz" -o tadabor.tar.gz
+          curl -fsSL "https://github.com/l7adj/Tadabor/archive/${SOURCE_SHA}.tar.gz" -o tadabor.tar.gz
           tar -xzf tadabor.tar.gz
-          mv "Tadabor-${GITHUB_SHA}" tadabor-src
+          mv "Tadabor-${SOURCE_SHA}" tadabor-src
           cd tadabor-src
           git init -q
 
