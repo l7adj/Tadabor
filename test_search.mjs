@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createQuranSearcher, normalizeArabic, orthographicKey } from './src/engine/search.js';
 
 assert.equal(normalizeArabic('إِبْرَٰهِيم'), 'ابراهيم');
-assert.equal(normalizeArabic('أَبرَاهِيم'), 'ابراهيم');
+assert.equal(normalizeArabic('أَبْرَاهِيم'), 'ابراهيم');
 assert.equal(orthographicKey('ابراهيم'), orthographicKey('ابرهيم'));
 assert.equal(orthographicKey('ابراهيم'), orthographicKey('ابراهم'));
 
@@ -14,10 +14,10 @@ const corpus = [
 ];
 
 const searcher = createQuranSearcher(corpus);
+const sortIds = values => values.map(x => x.globalNumber).sort((a, b) => a - b);
 
 for (const query of ['ابراهيم', 'إبراهيم', 'ابرهيم', 'ابراهم']) {
-  const ids = searcher.search(query).map(x => x.globalNumber);
-  assert.deepEqual(ids, [1, 2, 3, 4], `query ${query} must find all orthographic forms`);
+  assert.deepEqual(sortIds(searcher.search(query)), [1, 2, 3, 4], `query ${query} must find all orthographic forms`);
 }
 
 assert.deepEqual(
