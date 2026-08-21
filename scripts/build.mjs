@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createQuranSearcher } from '../src/engine/search.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -10,18 +11,13 @@ console.log('[build] Cleaning...');
 if (fs.existsSync(dist)) fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist, { recursive: true });
 
-function copyFile(src, dest) {
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(src, dest);
-}
-
+function copyFile(src, dest) { fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(src, dest); }
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const source = path.join(src, entry.name);
     const target = path.join(dest, entry.name);
-    if (entry.isDirectory()) copyDir(source, target);
-    else copyFile(source, target);
+    if (entry.isDirectory()) copyDir(source, target); else copyFile(source, target);
   }
 }
 
@@ -30,97 +26,47 @@ copyFile(path.join(root, 'mushaf.html'), path.join(dist, 'mushaf.html'));
 copyDir(path.join(root, 'src'), path.join(dist, 'src'));
 copyDir(path.join(root, 'public'), path.join(dist, 'public'));
 
-const builtIndex = path.join(dist, 'index.html');
-let html = fs.readFileSync(builtIndex, 'utf8');
-const searchImport = "import { createQuranSearcher, matchesSearchToken, normalizeArabic } from './src/engine/search.js';";
-
-const replacements = [
-  ['<script>\n', `<script type="module">\n${searchImport}\nlet quranSearcher=null;\n`],
-  [
-    "const QURAN_URL='./src/data/quranData.json';",
-    "const QURAN_URL='./src/data/quranData.json';\nconst SEARCH_URL='./src/data/searchData.json';"
-  ],
-  [
-    "function search(q){const n=norm(q);if(!n)return[];return corpus.filter(a=>{const text=norm(a.text);const terms=n.split(' ').filter(Boolean);return text.includes(n)||terms.every(t=>text.includes(t))||a.words.some(w=>norm(w).includes(n))})}",
-    'function search(q){return quranSearcher?quranSearcher.search(q):[]}'
-  ],
-  [
-    "function highlight(t,q){const nq=norm(q);if(!nq)return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:norm(x).includes(nq)?'<mark class=\"mark\">'+esc(x)+'</mark>':esc(x)).join('')}",
-    "function highlight(t,q){if(!q.trim())return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:(matchesSearchToken(x,q)?'<mark class=\"mark\">'+esc(x)+'</mark>':esc(x))).join('')}"
-  ],
-  [
-    "Promise.all([fetch(QURAN_URL).then(r=>r.json()),fetch(PAGES_URL).then(r=>r.json()),fetch(SURAHS_URL).then(r=>r.json())]).then(([q,p,s])=>{corpus=q.map((a,i)=>({globalNumber:i+1,surahId:a.surahId,ayahId:a.ayahId,text:a.text,page:pageForGlobalLocal(p.pageStarts,i+1),words:a.text.split(/\\s+/)}));pages=p;surahs=s;meta.textContent=`جاهز — ${corpus.length} آية • 604 صفحة محلية`;results()})",
-    "Promise.all([fetch(SEARCH_URL).then(r=>r.json()),fetch(QURAN_URL).then(r=>r.json()),fetch(PAGES_URL).then(r=>r.json()),fetch(SURAHS_URL).then(r=>r.json())]).then(([searchData,q,p,s])=>{corpus=q.map((a,i)=>({globalNumber:i+1,surahId:a.surahId,ayahId:a.ayahId,text:a.text,page:pageForGlobalLocal(p.pageStarts,i+1),words:a.text.split(/\\s+/)}));pages=p;surahs=s;quranSearcher=createQuranSearcher(searchData,corpus);meta.textContent=`جاهز — ${corpus.length} آية • 604 صفحة محلية`;results()})"
-  ]
-];
-
-for (const [before, after] of replacements) {
-  if (!html.includes(before)) {
-    console.error('[build] Expected index fragment not found:', before.slice(0, 120));
-    process.exit(1);
-  }
-  html = html.replace(before, after);
-}
-
-fs.writeFileSync(builtIndex, html);
-
 const required = [
-  'dist/index.html',
-  'dist/mushaf.html',
-  'dist/src/data/quranData.json',
-  'dist/src/data/searchData.json',
-  'dist/src/data/quranPages.json',
-  'dist/src/data/surahs.json',
-  'dist/src/engine/search.js',
-  'dist/public/sw.js'
+  'dist/index.html', 'dist/mushaf.html',
+  'dist/src/data/quranData.json', 'dist/src/data/searchData.json',
+  'dist/src/data/quranPages.json', 'dist/src/data/surahs.json',
+  'dist/src/engine/search.js', 'dist/public/sw.js'
 ];
-
 const missing = required.filter(relative => !fs.existsSync(path.join(root, relative)));
-if (missing.length > 0) {
-  console.error('[build] Missing required local resources:', missing.join(', '));
-  console.error('[build] Run: npm run download:quran');
-  process.exit(1);
+if (missing.length) throw new Error(`[build] Missing required resources: ${missing.join(', ')}`);
+
+const display = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/quranData.json'), 'utf8'));
+const search = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/searchData.json'), 'utf8'));
+if (display.length !== 6236 || search.length !== 6236) throw new Error('[build] Both Quran layers must contain exactly 6236 ayahs');
+
+for (let i = 0; i < 6236; i++) {
+  const s = search[i], d = display[i];
+  const same = Number(s.globalNumber) === i + 1 && Number(d.surahId) === Number(s.surahId) && Number(d.ayahId) === Number(s.ayahId);
+  if (!same) throw new Error(`[build] Search/display identity mismatch at ${i + 1}`);
 }
 
-const qData = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/quranData.json'), 'utf8'));
-const searchData = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/searchData.json'), 'utf8'));
-console.log(`[build] Display ayahs ${qData.length} PASS`);
-console.log(`[build] Search ayahs ${searchData.length} PASS`);
+const ibrahim = search.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124);
+if (!ibrahim || !ibrahim.text.includes('إبراهيم')) throw new Error('[build] Search corpus validation failed at 2:124: expected إبراهيم');
 
-if (qData.length !== 6236 || searchData.length !== 6236) {
-  console.error('[build] Both Quran layers must contain exactly 6236 ayahs');
-  process.exit(1);
-}
+const quranSearcher = createQuranSearcher(search, display);
+const normalizedResults = quranSearcher.search('ابراهيم');
+const hamzaResults = quranSearcher.search('إبراهيم');
+const normalizedMatch = normalizedResults.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124);
+const hamzaMatch = hamzaResults.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124);
+if (!normalizedMatch) throw new Error('[build] Search query ابراهيم failed to find 2:124');
+if (!hamzaMatch) throw new Error('[build] Search query إبراهيم failed to find 2:124');
+const uthmani = display.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124)?.text || '';
+if (normalizedMatch.text !== uthmani) throw new Error('[build] Search result/display mapping failed');
 
-const searchIds = searchData.map(x => Number(x.globalNumber));
-if (searchIds.some((id, i) => id !== i + 1)) {
-  console.error('[build] Search corpus globalNumber sequence FAIL');
-  process.exit(1);
-}
+const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+if (!html.includes("SEARCH_URL='./src/data/searchData.json'")) throw new Error('[build] UI search-data wiring missing');
+if (!html.includes("import {createQuranSearcher,matchesSearchToken} from './src/engine/search.js'")) throw new Error('[build] UI search engine import missing');
+if (html.includes('corpus=q.map') || html.includes('function search(q){const n=norm(q)')) throw new Error('[build] Legacy Uthmani-search path still present');
 
-const getDisplayIdentity = (item, index) => ({
-  surahId: Number(item?.surahId ?? item?.surah ?? item?.chapter ?? 0),
-  ayahId: Number(item?.ayahId ?? item?.numberInSurah ?? item?.verse ?? 0),
-  globalNumber: Number(item?.globalNumber ?? item?.number ?? index + 1)
-});
-
-for (let i = 0; i < searchData.length; i++) {
-  const search = searchData[i];
-  const display = getDisplayIdentity(qData[i], i);
-  const sameIdentity =
-    display.surahId === Number(search.surahId) &&
-    display.ayahId === Number(search.ayahId) &&
-    display.globalNumber === Number(search.globalNumber);
-  if (!sameIdentity) {
-    console.error('[build] Search/display ayah identity mapping FAIL at index', i + 1, { search, display });
-    process.exit(1);
-  }
-}
-
-if (!html.includes(searchImport) || !html.includes('quranSearcher=createQuranSearcher(searchData,corpus)')) {
-  console.error('[build] Search/display engine wiring FAIL');
-  process.exit(1);
-}
-
+console.log('[build] Display ayahs 6236 PASS');
+console.log('[build] Search ayahs 6236 PASS');
 console.log('[build] Search/display identity mapping PASS');
-console.log('[build] Search/display separation PASS');
+console.log('[build] Search query ابراهيم PASS');
+console.log('[build] Search query إبراهيم PASS');
+console.log('[build] Uthmani display mapping PASS');
+console.log('[build] UI uses independent search corpus PASS');
