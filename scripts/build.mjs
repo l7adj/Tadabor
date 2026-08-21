@@ -93,10 +93,28 @@ if (qData.length !== 6236 || searchData.length !== 6236) {
 }
 
 const searchIds = searchData.map(x => Number(x.globalNumber));
-const displayIds = qData.map((_, i) => i + 1);
-if (searchIds.some((id, i) => id !== displayIds[i])) {
-  console.error('[build] Search/display ayah identity mapping FAIL');
+if (searchIds.some((id, i) => id !== i + 1)) {
+  console.error('[build] Search corpus globalNumber sequence FAIL');
   process.exit(1);
+}
+
+const getDisplayIdentity = (item, index) => ({
+  surahId: Number(item?.surahId ?? item?.surah ?? item?.chapter ?? 0),
+  ayahId: Number(item?.ayahId ?? item?.numberInSurah ?? item?.verse ?? 0),
+  globalNumber: Number(item?.globalNumber ?? item?.number ?? index + 1)
+});
+
+for (let i = 0; i < searchData.length; i++) {
+  const search = searchData[i];
+  const display = getDisplayIdentity(qData[i], i);
+  const sameIdentity =
+    display.surahId === Number(search.surahId) &&
+    display.ayahId === Number(search.ayahId) &&
+    display.globalNumber === Number(search.globalNumber);
+  if (!sameIdentity) {
+    console.error('[build] Search/display ayah identity mapping FAIL at index', i + 1, { search, display });
+    process.exit(1);
+  }
 }
 
 if (!html.includes(searchImport) || !html.includes('quranSearcher=createQuranSearcher(searchData,corpus)')) {
@@ -104,4 +122,5 @@ if (!html.includes(searchImport) || !html.includes('quranSearcher=createQuranSea
   process.exit(1);
 }
 
+console.log('[build] Search/display identity mapping PASS');
 console.log('[build] Search/display separation PASS');
