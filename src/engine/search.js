@@ -1,76 +1,234 @@
-export function normalizeArabic(value = '') {
-  let text = String(value)
-    .normalize('NFKC')
-    .replace(/\u0670/gu, 'ا')
-    .replace(/\p{M}/gu, '')
-    .replace(/[\u060C\u061B\u061F\u066A-\u066D\u06D4\u00B7.,!?;:()[\]{}"'`~|/\\<>«»]/gu, ' ');
-  const map = new Map([
-    ['أ', 'ا'], ['إ', 'ا'], ['آ', 'ا'], ['ٱ', 'ا'], ['ٲ', 'ا'], ['ٳ', 'ا'], ['ٵ', 'ا'],
-    ['ى', 'ي'], ['ی', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ۆ', 'و'], ['ک', 'ك'],
-    ['ۀ', 'ه'], ['ە', 'ه'], ['ـ', '']
-  ]);
+const NORMALIZATION_VERSION = 2;
+
+const SEARCH_CHAR_MAP = new Map([
+  ['أ', 'ا'], ['إ', 'ا'], ['آ', 'ا'], ['ٱ', 'ا'], ['ٲ', 'ا'], ['ٳ', 'ا'], ['ٵ', 'ا'],
+  ['ى', 'ي'], ['ی', 'ي'],
+  ['ئ', 'ي'], ['ؤ', 'و'],
+  ['ک', 'ك'],
+]);
+
+const RELAXED_CHAR_MAP = new Map([
+  ...SEARCH_CHAR_MAP,
+  ['ة', 'ه'],
+]);
+
+const SEARCH_MARKS = /[\p{M}\uFEFF]/gu;
+const SEARCH_PUNCTUATION = /[\p{P}\p{S}]/gu;
+const TATWEEL = /\u0640/gu;
+const WHITESPACE = /\s+/gu;
+
+function mapChars(text, map) {
   let out = '';
   for (const ch of text) out += map.get(ch) ?? ch;
-  return out.replace(/\s+/gu, ' ').trim();
+  return out;
+}
+
+function canonicalize(value, map) {
+  return mapChars(
+    String(value ?? '')
+      .normalize('NFKC')
+      .replace(TATWEEL, '')
+      .replace(SEARCH_MARKS, '')
+      .replace(SEARCH_PUNCTUATION, ' ')
+      .replace(WHITESPACE, ' ')
+      .trim(),
+    map
+  ).replace(WHITESPACE, ' ').trim();
+}
+
+export function normalizeArabic(value = '') {
+  return canonicalize(value, SEARCH_CHAR_MAP);
 }
 
 export function orthographicKey(value = '') {
-  return normalizeArabic(value).replace(/[اوي]/gu, '');
+  return canonicalize(value, RELAXED_CHAR_MAP).replace(/[اوي]/gu, '');
 }
 
-function words(value) {
-  return normalizeArabic(value).split(' ').filter(Boolean);
+function buildPostingMap(documents, field) {
+  const postings = Object.create(null);
+
+  for (const document of documents) {
+    const seen = new Set();
+    for (const token of document[field]) {
+      if (!token || seen.has(token)) continue;
+      seen.add(token);
+      (postings[token] ??= []).push(document.id);
+    }
+  }
+
+  return postings;
 }
 
-function looseWords(value) {
-  return orthographicKey(value).split(' ').filter(Boolean);
-}
-
-export function createQuranSearcher(corpus = []) {
-  const index = corpus.map(item => {
+export function buildSearchIndex(corpus = []) {
+  const documents = corpus.map((item, i) => {
+    const id = Number.isInteger(item?.globalNumber) ? item.globalNumber : i + 1;
     const text = String(item?.text ?? '');
-    return {
-      item,
-      normalized: normalizeArabic(text),
-      orthographic: orthographicKey(text),
-      words: words(text),
-      looseWords: looseWords(text)
-    };
+    const normalized = normalizeArabic(text);
+    const tokens = normalized.split(' ').filter(Boolean);
+    const relaxedTokens = orthographicKey(text).split(' ').filter(Boolean);
+
+    return { id, normalized, tokens, relaxedTokens };
   });
 
   return {
-    search(query = '') {
-      const normalizedQuery = normalizeArabic(query);
-      if (!normalizedQuery) return [];
-      const queryWords = normalizedQuery.split(' ').filter(Boolean);
-      const looseQuery = orthographicKey(query);
-      const looseQueryWords = looseQuery.split(' ').filter(Boolean);
-
-      const matches = [];
-      for (const entry of index) {
-        let score = 0;
-        if (entry.normalized === normalizedQuery) score = 100;
-        else if (entry.normalized.includes(normalizedQuery)) score = 90;
-        else if (queryWords.every(w => entry.normalized.includes(w))) score = 80;
-        else if (queryWords.length === 1 && entry.words.some(w => w.includes(queryWords[0]))) score = 75;
-        else if (entry.orthographic === looseQuery) score = 65;
-        else if (entry.orthographic.includes(looseQuery)) score = 60;
-        else if (looseQueryWords.every(w => entry.orthographic.includes(w))) score = 55;
-        else if (looseQueryWords.length === 1 && entry.looseWords.some(w => w.includes(looseQueryWords[0]))) score = 50;
-        if (score > 0) matches.push({ item: entry.item, score });
-      }
-
-      return matches
-        .sort((a, b) => b.score - a.score || (a.item.globalNumber ?? 0) - (b.item.globalNumber ?? 0))
-        .map(x => x.item);
-    }
+    version: NORMALIZATION_VERSION,
+    documentCount: documents.length,
+    documents,
+    inverted: buildPostingMap(documents, 'tokens'),
+    relaxedInverted: buildPostingMap(documents, 'relaxedTokens')
   };
 }
 
-export function matchesSearchToken(displayToken, query) {
-  const q = normalizeArabic(query);
-  if (!q) return false;
-  const token = normalizeArabic(displayToken);
-  const looseQ = orthographicKey(query);
-  return token.includes(q) || (looseQ && orthographicKey(displayToken).includes(looseQ));
+function intersectSorted(left, right) {
+  const rightSet = new Set(right);
+  return left.filter(id => rightSet.has(id));
 }
+
+function getCandidates(searchIndex, queryWords) {
+  let candidates = null;
+  const modes = [];
+
+  for (const word of queryWords) {
+    const exact = searchIndex.inverted[word];
+    if (exact?.length) {
+      modes.push({ word, mode: 'exact', ids: exact });
+      candidates = candidates === null ? [...exact] : intersectSorted(candidates, exact);
+      continue;
+    }
+
+    const relaxedWord = orthographicKey(word);
+    const relaxed = relaxedWord ? searchIndex.relaxedInverted[relaxedWord] : null;
+    if (relaxed?.length) {
+      modes.push({ word, mode: 'relaxed', ids: relaxed });
+      candidates = candidates === null ? [...relaxed] : intersectSorted(candidates, relaxed);
+      continue;
+    }
+
+    return { ids: [], modes: [] };
+  }
+
+  return { ids: candidates ?? [], modes };
+}
+
+function hasPhrase(tokens, queryWords) {
+  if (!queryWords.length || queryWords.length > tokens.length) return false;
+  if (queryWords.length === 1) return tokens.includes(queryWords[0]);
+
+  for (let i = 0; i <= tokens.length - queryWords.length; i++) {
+    let match = true;
+    for (let j = 0; j < queryWords.length; j++) {
+      if (tokens[i + j] !== queryWords[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+function hasRelaxedPhrase(tokens, queryWords) {
+  const relaxedQuery = queryWords.map(orthographicKey);
+  if (!relaxedQuery.length || relaxedQuery.some(token => !token) || relaxedQuery.length > tokens.length) return false;
+  if (relaxedQuery.length === 1) return tokens.includes(relaxedQuery[0]);
+
+  for (let i = 0; i <= tokens.length - relaxedQuery.length; i++) {
+    let match = true;
+    for (let j = 0; j < relaxedQuery.length; j++) {
+      if (tokens[i + j] !== relaxedQuery[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+function rankDocument(document, query, queryWords, modes) {
+  const exactPhrase = hasPhrase(document.tokens, queryWords);
+  const relaxedPhrase = !exactPhrase && hasRelaxedPhrase(document.relaxedTokens, queryWords);
+  let score = 0;
+
+  if (document.normalized === query) score += 2000;
+  else if (exactPhrase) score += 1500;
+  else if (relaxedPhrase) score += 1100;
+
+  let exactCount = 0;
+  let relaxedCount = 0;
+  for (const queryWord of queryWords) {
+    if (document.tokens.includes(queryWord)) {
+      exactCount++;
+      score += 300;
+      continue;
+    }
+    const relaxedWord = orthographicKey(queryWord);
+    if (relaxedWord && document.relaxedTokens.includes(relaxedWord)) {
+      relaxedCount++;
+      score += 140;
+    }
+  }
+
+  score += exactCount * 20;
+  score += Math.max(0, queryWords.length - relaxedCount - exactCount) * -100;
+  score += modes.filter(item => item.mode === 'exact').length * 8;
+  score -= modes.filter(item => item.mode === 'relaxed').length * 4;
+  return score;
+}
+
+function substringFallback(corpus, queryWords) {
+  return corpus.filter(item => {
+    const tokens = normalizeArabic(item?.text).split(' ').filter(Boolean);
+    return queryWords.every(queryWord => tokens.some(token => token.includes(queryWord)));
+  });
+}
+
+export function createQuranSearcher(corpus = [], suppliedIndex = null) {
+  const searchIndex = suppliedIndex ?? buildSearchIndex(corpus);
+  const byId = new Map(corpus.map((item, i) => [
+    Number.isInteger(item?.globalNumber) ? item.globalNumber : i + 1,
+    item
+  ]));
+  const documentById = new Map(searchIndex.documents.map(document => [document.id, document]));
+
+  function search(query = '') {
+    const normalizedQuery = normalizeArabic(query);
+    if (!normalizedQuery) return [];
+
+    const queryWords = normalizedQuery.split(' ').filter(Boolean);
+    const { ids, modes } = getCandidates(searchIndex, queryWords);
+
+    if (!ids.length) {
+      return substringFallback(corpus, queryWords)
+        .map(item => ({ item, score: 100 }))
+        .sort((a, b) => (b.score - a.score) || ((a.item.globalNumber ?? 0) - (b.item.globalNumber ?? 0)))
+        .map(({ item }) => item);
+    }
+
+    return ids
+      .map(id => {
+        const document = documentById.get(id);
+        const item = byId.get(id);
+        if (!document || !item) return null;
+        return { item, score: rankDocument(document, normalizedQuery, queryWords, modes) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || (a.item.globalNumber ?? 0) - (b.item.globalNumber ?? 0))
+      .map(({ item }) => item);
+  }
+
+  return { search, index: searchIndex, normalizationVersion: NORMALIZATION_VERSION };
+}
+
+export function matchesSearchToken(displayToken, query) {
+  const normalizedQuery = normalizeArabic(query);
+  if (!normalizedQuery || normalizedQuery.includes(' ')) return false;
+
+  const normalizedToken = normalizeArabic(displayToken);
+  if (normalizedToken.includes(normalizedQuery)) return true;
+
+  const relaxedQuery = orthographicKey(normalizedQuery);
+  return Boolean(relaxedQuery && orthographicKey(displayToken).includes(relaxedQuery));
+}
+
+export { NORMALIZATION_VERSION };
