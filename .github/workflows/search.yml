@@ -36,4 +36,4 @@ jobs:
       - name: Verify built search index
         run: |
           test -s dist/src/data/quranSearchIndex.json
-          node -e "const fs=require('fs'); const i=JSON.parse(fs.readFileSync('dist/src/data/quranSearchIndex.json','utf8')); if(i.documentCount!==6236 || i.source?.ayahCount!==6236 || i.source?.surahCount!==114) process.exit(1); console.log('[ci] built search index metadata PASS')"
+          node -e "const fs=require('fs'); const i=JSON.parse(fs.readFileSync('dist/src/data/quranSearchIndex.json','utf8')); if(i.documentCount!==6236 || i.source?.displayAyahCount!==6236 || i.source?.displaySurahCount!==114 || i.source?.searchRepresentation!=='ordinary-arabic') process.exit(1); console.log('[ci] ordinary-Arabic search index metadata PASS')"
