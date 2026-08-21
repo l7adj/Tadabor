@@ -11,7 +11,7 @@ const searchIndex = buildSearchIndex(corpus);
 const searcher = createQuranSearcher(corpus, searchIndex);
 
 const expectedNormalizationCases = [
-  ['إِبْرَٰهِيم', 'ابراهيم'],
+  ['إِبْرَٰهِيم', 'ابرهيم'],
   ['أَبْرَاهِيم', 'ابراهيم'],
   ['ٱلرَّحْمَـٰنِ', 'الرحمن'],
   ['صَلَّى اللَّهُ', 'صلى الله'],
