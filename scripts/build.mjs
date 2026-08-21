@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { execFileSync } from 'child_process';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = path.dirname(new URL('.', import.meta.url).pathname);
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
 
@@ -30,36 +30,11 @@ copyFile(path.join(root, 'mushaf.html'), path.join(dist, 'mushaf.html'));
 copyDir(path.join(root, 'src'), path.join(dist, 'src'));
 copyDir(path.join(root, 'public'), path.join(dist, 'public'));
 
-const builtIndex = path.join(dist, 'index.html');
-let html = fs.readFileSync(builtIndex, 'utf8');
-const searchImport = "import { createQuranSearcher, matchesSearchToken, normalizeArabic } from './src/engine/search.js';";
-
-const replacements = [
-  ['<script>\n', `<script type="module">\n${searchImport}\nlet quranSearcher=null;\n`],
-  [
-    "const norm=s=>(s||'').normalize('NFC').replace(/[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED\\u0640]/gu,'').replace(/[أإآٱ]/g,'ا').replace(/\\s+/g,' ').trim();",
-    'const norm=s=>normalizeArabic(s);'
-  ],
-  [
-    "function search(q){const n=norm(q);if(!n)return[];return corpus.filter(a=>{const text=norm(a.text);const terms=n.split(' ').filter(Boolean);return text.includes(n)||terms.every(t=>text.includes(t))||a.words.some(w=>norm(w).includes(n))})}",
-    'function search(q){return quranSearcher?quranSearcher.search(q):[]}'
-  ],
-  [
-    "function highlight(t,q){const nq=norm(q);if(!nq)return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:norm(x).includes(nq)?'<mark class=\"mark\">'+esc(x)+'</mark>':esc(x)).join('')}",
-    "function highlight(t,q){if(!q.trim())return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:(matchesSearchToken(x,q)?'<mark class=\"mark\">'+esc(x)+'</mark>':esc(x))).join('')}"
-  ],
-  ['surahs=s;meta.textContent=', 'surahs=s;quranSearcher=createQuranSearcher(corpus);meta.textContent=']
-];
-
-for (const [before, after] of replacements) {
-  if (!html.includes(before)) {
-    console.error('[build] Expected index fragment not found:', before.slice(0, 100));
-    process.exit(1);
-  }
-  html = html.replace(before, after);
-}
-
-fs.writeFileSync(builtIndex, html);
+console.log('[build] Building ordinary-Arabic Quran search index...');
+execFileSync(process.execPath, [path.join(root, 'scripts/build-search-index.mjs')], {
+  cwd: root,
+  stdio: 'inherit'
+});
 
 const required = [
   'dist/index.html',
@@ -67,26 +42,41 @@ const required = [
   'dist/src/data/quranData.json',
   'dist/src/data/quranPages.json',
   'dist/src/data/surahs.json',
+  'dist/src/data/quranSearchIndex.json',
   'dist/src/engine/search.js',
   'dist/public/sw.js'
 ];
 
 const missing = required.filter(relative => !fs.existsSync(path.join(root, relative)));
 if (missing.length > 0) {
-  console.error('Missing', missing);
+  console.error('[build] Missing', missing);
   process.exit(1);
 }
 
-const qData = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/quranData.json'), 'utf8'));
-console.log(`[build] Ayahs ${qData.length} PASS`);
-if (qData.length !== 6236) {
-  console.error(`[build] Expected 6236 ayahs, found ${qData.length}`);
+const qData = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/quranData.json'), 'utf8').replace(/^\uFEFF/u, ''));
+console.log(`[build] Display ayahs ${qData.length} PASS`);
+if (qData.length !== 6236) process.exit(1);
+
+const builtIndex = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/quranSearchIndex.json'), 'utf8'));
+if (
+  builtIndex.documentCount !== 6236 ||
+  builtIndex.source?.displayAyahCount !== 6236 ||
+  builtIndex.source?.displaySurahCount !== 114 ||
+  builtIndex.source?.searchRepresentation !== 'ordinary-arabic'
+) {
+  console.error('[build] Search index metadata FAIL');
   process.exit(1);
 }
+console.log('[build] Search representation ordinary Arabic PASS');
+console.log('[build] Search/display ayah mapping 6236/6236 PASS');
 
-if (!html.includes(searchImport) || !html.includes('quranSearcher=createQuranSearcher(corpus)')) {
+const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+if (!html.includes('./src/engine/search.js') || !html.includes('./src/data/quranSearchIndex.json') || !html.includes('createQuranSearcher')) {
   console.error('[build] Search engine wiring FAIL');
   process.exit(1);
 }
-
+if (/\bcorpus\.filter\b|\bfunction search\(q\)\{const n=/.test(html)) {
+  console.error('[build] Legacy inline search implementation detected');
+  process.exit(1);
+}
 console.log('[build] Search engine wiring PASS');

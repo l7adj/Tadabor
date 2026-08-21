@@ -1,0 +1,39 @@
+name: Quran Search Validation
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Quran data
+        run: npm run validate:data
+
+      - name: Test Quran search
+        run: npm run test:search
+
+      - name: Build Tadabor
+        run: npm run build
+
+      - name: Verify built search index
+        run: |
+          test -s dist/src/data/quranSearchIndex.json
+          node -e "const fs=require('fs'); const i=JSON.parse(fs.readFileSync('dist/src/data/quranSearchIndex.json','utf8')); if(i.documentCount!==6236 || i.source?.displayAyahCount!==6236 || i.source?.displaySurahCount!==114 || i.source?.searchRepresentation!=='ordinary-arabic') process.exit(1); console.log('[ci] ordinary-Arabic search index metadata PASS')"
