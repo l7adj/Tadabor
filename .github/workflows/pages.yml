@@ -23,6 +23,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare local Quran search corpus
+        run: npm run download:quran
+
       - name: Build Tadabor
         run: npm run build
 
