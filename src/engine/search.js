@@ -2,7 +2,9 @@ export function normalizeArabic(value = '') {
   const map = new Map([
     ['أ', 'ا'], ['إ', 'ا'], ['آ', 'ا'], ['ٱ', 'ا'], ['ٲ', 'ا'], ['ٳ', 'ا'], ['ٵ', 'ا'],
     ['ى', 'ي'], ['ی', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ۆ', 'و'], ['ک', 'ك'],
-    ['ۀ', 'ه'], ['ە', 'ه'], ['ـ', '']
+    ['ۀ', 'ه'], ['ە', 'ه'], ['ـ', ''],
+    // Uthmani small letters represent underlying letters in the written text.
+    ['ۥ', 'و'], ['ۦ', 'ي']
   ]);
 
   let text = String(value)
