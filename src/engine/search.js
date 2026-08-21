@@ -7,7 +7,7 @@ const CHAR_MAP = new Map([
   ['ى', 'ى'], ['ی', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ک', 'ك']
 ]);
 
-const MARKS = /[\u0610-\u061A\u064B-\u065F\u06D6-\u06ED\uFEFF]/gu;
+const MARKS = /[\u0610-\u061A\u064B-\u065F\u06D6-\u06ED\uFEFF]/u;
 const PUNCTUATION = /[\p{P}\p{S}]/gu;
 const TATWEEL = /\u0640/gu;
 const WHITESPACE = /\s+/gu;
