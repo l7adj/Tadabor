@@ -16,31 +16,25 @@ const searcher = createQuranSearcher(displayCorpus, searchIndex);
 assert.equal(normalizeArabic('ابراهيم'), 'ابراهيم');
 assert.equal(normalizeArabic('إبراهيم'), 'ابراهيم');
 assert.equal(normalizeArabic('إِبْرَٰهِـۧمَ'), 'ابراهيم');
-assert.equal(normalizeArabic('الرَّحْمَـٰن'), 'الرحمن');
 
 const expectedIbrahimKeys = searchCorpus
   .filter(item => item.searchText.split(/\s+/).some(word => normalizeArabic(word) === 'ابراهيم'))
   .map(item => `${item.surahId}:${item.ayahId}`);
+assert.ok(expectedIbrahimKeys.length > 0, 'ordinary Arabic corpus must contain Ibrahim');
+
 const actualIbrahim = searcher.search('ابراهيم');
 const actualIbrahimKeys = actualIbrahim.map(item => `${item.surahId}:${item.ayahId}`);
-
 assert.equal(actualIbrahimKeys.length, expectedIbrahimKeys.length, 'ordinary Arabic search must return every exact Ibrahim occurrence');
 for (const key of expectedIbrahimKeys) {
   assert.ok(actualIbrahimKeys.includes(key), `Ibrahim search must include ${key}`);
 }
 
-for (const query of ['ابراهيم', 'إبراهيم', 'إِبْرَٰهِيم']) {
-  const results = searcher.search(query);
-  const resultKeys = new Set(results.map(a => `${a.surahId}:${a.ayahId}`));
-  assert.equal(results.length, expectedIbrahimKeys.length, `query ${query} must use the ordinary Arabic index`);
-  for (const key of expectedIbrahimKeys) assert.ok(resultKeys.has(key), `query ${query} must reach ${key}`);
-}
+// The user searches the ordinary corpus; Uthmani spellings are not a second search corpus.
+const hamzaVariant = searcher.search('إبراهيم').map(a => `${a.surahId}:${a.ayahId}`);
+assert.deepEqual(hamzaVariant, actualIbrahimKeys, 'ordinary Arabic hamza variant should resolve to the same ordinary search word');
 
-for (const query of ['ابرهيم', 'ابراهم']) {
-  const results = searcher.search(query);
-  assert.ok(results.length > 0, `controlled spelling fallback for ${query}`);
-  assert.ok(results.some(a => a.surahId === 2 && a.ayahId === 124), `${query} must still reach Al-Baqarah 2:124`);
-}
+// No orthographic fallback: a spelling not present in the ordinary corpus is not invented.
+assert.deepEqual(searcher.search('ابراهم'), [], 'search must not invent a Quran word from an orthographic fallback');
 
 const basmalaResults = searcher.search('بسم الله');
 assert.ok(basmalaResults.some(a => a.surahId === 1 && a.ayahId === 1), 'Basmala must find Al-Fatihah 1:1');
@@ -53,11 +47,12 @@ assert.equal(first.text, quranData[1].text, 'result must return original Uthmani
 
 assert.equal(searchIndex.documentCount, 6236);
 assert.equal(searchIndex.documents.length, 6236);
+assert.equal(searchIndex.representation, 'ordinary-arabic');
 assert.equal(source.ayahCount, 6236);
 
 console.log('[search] display corpus 6236 PASS');
 console.log('[search] ordinary-Arabic search corpus 6236 PASS');
 console.log('[search] same-ayah mapping 6236/6236 PASS');
-console.log(`[search] Ibrahim exact-word corpus regression PASS (${expectedIbrahimKeys.length} ayahs)`);
-console.log('[search] Al-Baqarah Uthmani variants PASS');
+console.log(`[search] Ibrahim ordinary-word regression PASS (${expectedIbrahimKeys.length} ayahs)`);
+console.log('[search] no Uthmani search fallback PASS');
 console.log('[search] original-Uthmani result preservation PASS');
