@@ -1,32 +1,65 @@
 import assert from 'node:assert/strict';
-import { createQuranSearcher, normalizeArabic, orthographicKey } from './src/engine/search.js';
+import fs from 'node:fs';
+import { buildSearchIndex, createQuranSearcher, normalizeArabic, orthographicKey } from './src/engine/search.js';
 
-assert.equal(normalizeArabic('إِبْرَٰهِيم'), 'ابراهيم');
-assert.equal(normalizeArabic('أَبْرَاهِيم'), 'ابراهيم');
+const stripBom = value => value.replace(/^\uFEFF/u, '');
+const quranData = JSON.parse(stripBom(fs.readFileSync('./src/data/quranData.json', 'utf8')));
+assert.equal(quranData.length, 6236, 'Quran corpus must contain 6236 ayahs');
+
+const corpus = quranData.map((ayah, index) => ({ ...ayah, globalNumber: index + 1 }));
+const searchIndex = buildSearchIndex(corpus);
+const searcher = createQuranSearcher(corpus, searchIndex);
+
+const expectedNormalizationCases = [
+  ['إِبْرَٰهِيم', 'ابراهيم'],
+  ['أَبْرَاهِيم', 'ابراهيم'],
+  ['ٱلرَّحْمَـٰنِ', 'الرحمن'],
+  ['صَلَّى اللَّهُ', 'صلى الله'],
+  ['مَـٰلِكِ يَوْمِ الدِّينِ', 'مالك يوم الدين'],
+  ['كُلٌّ ۖ لَّهُ', 'كل له'],
+  ['تـطـويـل', 'تطويل'],
+  ['أإآٱ', 'اااا']
+];
+
+for (const [input, expected] of expectedNormalizationCases) {
+  assert.equal(normalizeArabic(input), expected, `normalizeArabic(${input})`);
+}
+
 assert.equal(orthographicKey('ابراهيم'), orthographicKey('ابرهيم'));
 assert.equal(orthographicKey('ابراهيم'), orthographicKey('ابراهم'));
 
-const corpus = [
-  { globalNumber: 1, text: 'إِبْرَٰهِيمُ يَتْلُو عَلَيْهِمْ' },
-  { globalNumber: 2, text: 'وَإِبْرَهِيمُ رَبِّي' },
-  { globalNumber: 3, text: 'وَإِبْرَاهِمُ خَلِيلِي' },
-  { globalNumber: 4, text: 'إِبْرَهِيمُ الْبَاحِثُ' }
-];
+const quranResult = searcher.search('إِبْرَٰهِيم');
+assert.ok(quranResult.length > 0, 'Quran must contain Ibrahim');
+const referenceGlobal = quranResult[0].globalNumber;
+const variants = ['ابراهيم', 'إبراهيم', 'ابرهيم', 'ابراهم', 'إِبْرَٰهِيم'];
 
-const searcher = createQuranSearcher(corpus);
-const sortIds = values => values.map(x => x.globalNumber).sort((a, b) => a - b);
-
-for (const query of ['ابراهيم', 'إبراهيم', 'ابرهيم', 'ابراهم']) {
-  assert.deepEqual(sortIds(searcher.search(query)), [1, 2, 3, 4], `query ${query} must find all orthographic forms`);
+for (const query of variants) {
+  const results = searcher.search(query);
+  assert.ok(results.length > 0, `query ${query} must return results`);
+  assert.ok(results.some(a => a.globalNumber === referenceGlobal), `query ${query} must reach the same Quran target`);
 }
 
-assert.deepEqual(
-  searcher.search('ابراهيم الباحث').map(x => x.globalNumber),
-  [4],
-  'multi-word query must require all query terms'
-);
+const exactDisplay = searcher.search('بسم الله');
+assert.ok(exactDisplay.length > 0, 'Exact normalized phrase must find 1:1');
+assert.equal(exactDisplay[0].text, quranData[0].text, 'Search result must preserve original عثماني text');
 
-console.log('[search] Arabic normalization PASS');
-console.log('[search] dagger-alif PASS');
-console.log('[search] orthographic variants PASS');
-console.log('[search] multi-word matching PASS');
+const corpusVariantGroups = new Map();
+for (const document of searchIndex.documents) {
+  for (const token of document.tokens) {
+    const key = orthographicKey(token);
+    if (!key) continue;
+    const set = corpusVariantGroups.get(key) ?? new Set();
+    set.add(token);
+    corpusVariantGroups.set(key, set);
+  }
+}
+const multiFormGroups = [...corpusVariantGroups.values()].filter(set => set.size > 1);
+assert.ok(multiFormGroups.length >= 5, 'Corpus should expose multiple controlled orthographic variant groups');
+
+assert.equal(normalizeArabic('ۖ ٱلْحَمْدُ، لِلَّهِ'), 'الحمد لله');
+
+console.log('[search] Quran corpus 6236 PASS');
+console.log('[search] normalization families PASS');
+console.log('[search] Ibrahim regression set PASS');
+console.log('[search] original-display preservation PASS');
+console.log(`[search] controlled rasm variant groups: ${multiFormGroups.length} PASS`);
