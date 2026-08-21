@@ -26,6 +26,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Development-time only: refresh the committed local search corpus.
       - name: Prepare local Quran search corpus
         run: npm run download:quran
 
