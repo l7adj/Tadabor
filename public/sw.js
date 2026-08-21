@@ -1,4 +1,42 @@
-const CACHE='tadabor-offline-v1';
-self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./','./index.html','./mushaf.html','./src/data/quranData.json','./src/data/quranPages.json','./src/data/surahs.json','./src/engine/mushaf.js'])))});
-self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(u.origin!==self.location.origin)return;e.respondWith(caches.match(e.request).then(x=>x||fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(k=>k.put(e.request,c));return r;})))})
+const CACHE='tadabor-offline-v2';
+const PRECACHE=[
+  './',
+  './index.html',
+  './mushaf.html',
+  './manifest.webmanifest',
+  './offline-bridge.js',
+  './src/data/quranData.json',
+  './src/data/quranPages.json',
+  './src/data/surahs.json',
+  './src/engine/mushaf.js'
+];
+
+self.addEventListener('install', event => {
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PRECACHE)));
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE).map(key => caches.delete(key))
+    )).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      if (cached) return cached;
+      return fetch(event.request).then(response => {
+        if (!response || response.status !== 200 || response.type === 'opaque') return response;
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(event.request, copy));
+        return response;
+      });
+    })
+  );
+});
