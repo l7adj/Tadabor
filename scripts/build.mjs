@@ -30,40 +30,29 @@ copyFile(path.join(root, 'mushaf.html'), path.join(dist, 'mushaf.html'));
 copyDir(path.join(root, 'src'), path.join(dist, 'src'));
 copyDir(path.join(root, 'public'), path.join(dist, 'public'));
 
-// Wire the deployable HTML to the dedicated search engine without changing
-// the Uthmanic Quran text used for display.
 const builtIndex = path.join(dist, 'index.html');
 let html = fs.readFileSync(builtIndex, 'utf8');
 
-html = html.replace(
-  '<script>\n',
-  '<script type="module">\nimport { createQuranSearcher, matchesSearchToken, normalizeArabic } from \'./src/engine/search.js\';\nlet quranSearcher = null;\n',
-  1
-);
+const searchImport = "import { createQuranSearcher, matchesSearchToken, normalizeArabic } from './src/engine/search.js';";
+const legacyNorm = "const norm=s=>(s||'').normalize('NFC').replace(/[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED\\u0640]/gu,'').replace(/[أإآٱ]/g,'ا').replace(/\\s+/g,' ').trim();";
+const legacySearch = "function search(q){const n=norm(q);if(!n)return[];return corpus.filter(a=>{const text=norm(a.text);const terms=n.split(' ').filter(Boolean);return text.includes(n)||terms.every(t=>text.includes(t))||a.words.some(w=>norm(w).includes(n))})}";
+const legacyHighlight = "function highlight(t,q){const nq=norm(q);if(!nq)return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:norm(x).includes(nq)?'<mark class=\"mark\">'+esc(x)+'</mark>':esc(x)).join('')}";
 
-html = html.replace(
-  /const norm=s=>.*?;const esc=/,
-  "const norm=s=>normalizeArabic(s);const esc=",
-  1
-);
+const replacements = [
+  ['<script>\n', `<script type=\"module\">\n${searchImport}\nlet quranSearcher=null;\n`],
+  [legacyNorm, 'const norm=s=>normalizeArabic(s);'],
+  [legacySearch, 'function search(q){return quranSearcher?quranSearcher.search(q):[]}'],
+  [legacyHighlight, "function highlight(t,q){if(!q.trim())return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:(matchesSearchToken(x,q)?'<mark class=\"mark\">'+esc(x)+'</mark>':esc(x))).join('')}"],
+  ['surahs=s;meta.textContent=', 'surahs=s;quranSearcher=createQuranSearcher(corpus);meta.textContent=']
+];
 
-html = html.replace(
-  /function search\(q\)\{.*?\}function results\(\)/,
-  "function search(q){return quranSearcher ? quranSearcher.search(q) : [];}function results()",
-  1
-);
-
-html = html.replace(
-  /function highlight\(t,q\)\{.*?\}let corpus=/,
-  "function highlight(t,q){if(!q.trim())return esc(t);return t.split(/(\\s+)/).map(x=>/^\\s+$/.test(x)?x:(matchesSearchToken(x,q)?'<mark class=\\\"mark\\\">'+esc(x)+'</mark>':esc(x))).join('')}let corpus=",
-  1
-);
-
-html = html.replace(
-  /surahs=s;meta\.textContent=/,
-  'surahs=s;quranSearcher=createQuranSearcher(corpus);meta.textContent=',
-  1
-);
+for (const [before, after] of replacements) {
+  if (!html.includes(before)) {
+    console.error('[build] Expected index fragment not found:', before.slice(0, 80));
+    process.exit(1);
+  }
+  html = html.replace(before, after);
+}
 
 fs.writeFileSync(builtIndex, html);
 
@@ -90,7 +79,7 @@ if (qData.length !== 6236) {
   process.exit(1);
 }
 
-if (!html.includes("import { createQuranSearcher, matchesSearchToken, normalizeArabic } from './src/engine/search.js';")) {
+if (!html.includes(searchImport)) {
   console.error('[build] Search engine wiring FAIL');
   process.exit(1);
 }
