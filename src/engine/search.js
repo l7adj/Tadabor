@@ -23,6 +23,31 @@ function ayahKey(item) {
   return `${Number(item?.surahId)}:${Number(item?.ayahId)}`;
 }
 
+function findMatchedWordIndexes(searchWords, queryWords) {
+  if (!queryWords.length) return [];
+  if (queryWords.length === 1) {
+    return searchWords.reduce((out, word, index) => {
+      if (word.includes(queryWords[0])) out.push(index);
+      return out;
+    }, []);
+  }
+
+  const indexes = [];
+  for (let i = 0; i <= searchWords.length - queryWords.length; i += 1) {
+    let ok = true;
+    for (let j = 0; j < queryWords.length; j += 1) {
+      if (!searchWords[i + j].includes(queryWords[j])) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      for (let j = 0; j < queryWords.length; j += 1) indexes.push(i + j);
+    }
+  }
+  return [...new Set(indexes)];
+}
+
 export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
   const displayByAyah = new Map();
 
@@ -63,13 +88,22 @@ export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
           if (!displayItem) {
             throw new Error(`No matching display ayah for ${entry.key}`);
           }
-          matches.push({ item: displayItem, score });
+
+          const matchWordIndexes = findMatchedWordIndexes(entry.words, queryWords);
+          matches.push({
+            item: displayItem,
+            score,
+            matchWordIndexes
+          });
         }
       }
 
       return matches
         .sort((a, b) => b.score - a.score || Number(a.item.surahId) - Number(b.item.surahId) || Number(a.item.ayahId) - Number(b.item.ayahId))
-        .map(match => match.item);
+        .map(match => ({
+          ...match.item,
+          _matchWordIndexes: match.matchWordIndexes
+        }));
     }
   };
 }
