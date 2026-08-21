@@ -6,8 +6,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "offline:check": "node scripts/check-offline.mjs",
-    "mobile:prepare": "npm run build && npx cap sync android",
-    "android:build": "npm run mobile:prepare && cd android && ./gradlew assembleDebug"
+    "download:quran": "node scripts/download-quran.mjs",
+    "validate:data": "node scripts/validate-data.mjs",
+    "test:search": "node test_search.mjs",
+    "test:full": "node full_test.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.0"

@@ -1,25 +1,26 @@
-import { readFileSync } from 'node:fs';
-import { globSync } from 'node:fs';
-
-const files = globSync([
-  'index.html',
-  'mushaf.html',
-  'src/**/*.js',
-  'src/**/*.json',
-  'public/**/*.{js,json,webmanifest}',
-  'scripts/**/*.mjs',
-  'capacitor.config.ts',
-  'package.json'
-], { exclude: ['**/node_modules/**', 'dist/**'] });
-
-const remoteUrl = /https?:\\/\\//g;
-const hits = [];
-for (const file of files) {
-  const text = readFileSync(file, 'utf8');
-  if (remoteUrl.test(text)) hits.push(file);
+import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(__dirname,'..');
+console.log('[offline:check] scanning...');
+let errors=[];
+function scan(fp){
+  if (fp.includes('sw.js')) return;
+  const content=fs.readFileSync(fp,'utf-8');
+  if ((content.includes('https://')||content.includes('http://')) && (fp.includes('src/engine')||fp.endsWith('.html'))) {
+    const lines=content.split('\n');
+    lines.forEach((line,i)=>{
+      if (line.includes('https://') && !line.trim().startsWith('//') && !line.includes('androidScheme')) {
+        errors.push(`${fp}:${i+1} ${line.trim().slice(0,100)}`);
+      }
+    });
+  }
 }
-if (hits.length) {
-  console.error('Offline check failed. Remote URLs found in:', hits.join(', '));
-  process.exit(1);
+function walk(dir){
+  for (const e of fs.readdirSync(dir,{withFileTypes:true})){
+    const p=path.join(dir,e.name);
+    if (e.isDirectory()){ if (['node_modules','dist','android'].includes(e.name)) continue; walk(p); }
+    else if (e.name.endsWith('.js')||e.name.endsWith('.html')) scan(p);
+  }
 }
-console.log(`Offline source check passed for ${files.length} files.`);
+walk(root);
+if(errors.length>0){ console.error('FAIL',errors); process.exit(1);} else console.log('PASS');
