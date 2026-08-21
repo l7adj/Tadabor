@@ -47,6 +47,10 @@ jobs:
         working-directory: tadabor-src
         run: npm install --no-audit --no-fund
 
+      - name: Prepare local Quran search corpus
+        working-directory: tadabor-src
+        run: npm run download:quran
+
       - name: Verify offline sources
         working-directory: tadabor-src
         run: npm run offline:check
