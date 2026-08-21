@@ -12,6 +12,12 @@ async function fetchJson(url) {
   return await res.json();
 }
 
+async function fetchText(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} HTTP ${res.status}`);
+  return await res.text();
+}
+
 function toFlatAyahs(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.chapter)) return data.chapter;
@@ -47,6 +53,38 @@ function toSearchCorpus(data) {
   return ayahs;
 }
 
+function parseTanzilSimpleClean(text) {
+  const rows = text
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => /^\d+\|\d+\|/.test(line));
+
+  const ayahs = rows.map((line, index) => {
+    const first = line.indexOf('|');
+    const second = line.indexOf('|', first + 1);
+    return {
+      globalNumber: index + 1,
+      surahId: Number(line.slice(0, first)),
+      ayahId: Number(line.slice(first + 1, second)),
+      text: line.slice(second + 1)
+    };
+  });
+
+  if (ayahs.length !== 6236) {
+    throw new Error(`Tanzil Simple Clean must contain 6236 ayahs, found ${ayahs.length}`);
+  }
+
+  for (let i = 0; i < ayahs.length; i++) {
+    const ayah = ayahs[i];
+    if (!ayah.surahId || !ayah.ayahId || !ayah.text) {
+      throw new Error(`Invalid Tanzil search ayah at index ${i + 1}`);
+    }
+  }
+
+  return ayahs;
+}
+
 async function ensureDisplayCorpus() {
   const target = path.join(dataDir, 'quranData.json');
   if (fs.existsSync(target)) {
@@ -69,7 +107,7 @@ async function ensureDisplayCorpus() {
       const data = await fetchJson(url);
       const ayahs = toFlatAyahs(data);
       if (ayahs.length !== 6236) throw new Error(`Expected 6236 ayahs, found ${ayahs.length}`);
-      const converted = ayahs.map((x, i) => ({
+      const converted = ayahs.map(x => ({
         surahId: Number(x.chapter ?? x.surahId ?? x.surah),
         ayahId: Number(x.verse ?? x.ayahId ?? x.numberInSurah),
         text: String(x.text ?? '')
@@ -88,23 +126,29 @@ async function ensureDisplayCorpus() {
 
 async function downloadSearchCorpus() {
   const urls = [
-    'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranspellednod.json',
-    'https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranspellednod.min.json'
+    'https://tanzil.net/pub/download/quran-simple-clean.txt',
+    'https://raw.githubusercontent.com/lafzi/quran_fts/master/data/quran-simple-clean.txt'
   ];
 
   let lastError;
   for (const url of urls) {
     try {
-      const data = await fetchJson(url);
-      const searchCorpus = toSearchCorpus(data);
+      const text = await fetchText(url);
+      const searchCorpus = parseTanzilSimpleClean(text);
+
+      const ibrahim = searchCorpus.find(x => x.surahId === 2 && x.ayahId === 124);
+      if (!ibrahim || !ibrahim.text.includes('إبراهيم')) {
+        throw new Error('Search corpus validation failed: 2:124 must contain إبراهيم');
+      }
+
       fs.mkdirSync(dataDir, { recursive: true });
       fs.writeFileSync(
         path.join(dataDir, 'searchData.json'),
         JSON.stringify(searchCorpus, null, 2),
         'utf8'
       );
-      console.log('[download] Created searchData.json with 6236 search ayahs');
-      console.log('[download] Source: Quran Spelled No Diacritics');
+      console.log('[download] Created searchData.json with 6236 ayahs');
+      console.log('[download] Source: Tanzil Simple Clean');
       return;
     } catch (error) {
       lastError = error;
