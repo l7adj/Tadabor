@@ -39,13 +39,34 @@ const display = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/quranData.j
 const search = JSON.parse(fs.readFileSync(path.join(dist, 'src/data/searchData.json'), 'utf8'));
 if (display.length !== 6236 || search.length !== 6236) throw new Error('[build] Both Quran layers must contain exactly 6236 ayahs');
 
-for (let i = 0; i < 6236; i++) {
-  const s = search[i], d = display[i];
-  const same = Number(s.globalNumber) === i + 1 && Number(d.surahId) === Number(s.surahId) && Number(d.ayahId) === Number(s.ayahId);
-  if (!same) throw new Error(`[build] Search/display identity mismatch at ${i + 1}`);
+function buildIdentityIndex(corpus, name) {
+  const index = new Map();
+  for (const item of corpus) {
+    const surahId = Number(item?.surahId);
+    const ayahId = Number(item?.ayahId);
+    if (!Number.isInteger(surahId) || !Number.isInteger(ayahId) || surahId < 1 || ayahId < 1) {
+      throw new Error(`[build] Invalid ayah identity in ${name}`);
+    }
+    const key = `${surahId}:${ayahId}`;
+    if (index.has(key)) throw new Error(`[build] Duplicate ayah identity in ${name}: ${key}`);
+    index.set(key, item);
+  }
+  return index;
 }
 
-const ibrahim = search.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124);
+const displayByAyah = buildIdentityIndex(display, 'quranData.json');
+const searchByAyah = buildIdentityIndex(search, 'searchData.json');
+if (displayByAyah.size !== 6236 || searchByAyah.size !== 6236) {
+  throw new Error('[build] Both Quran layers must contain 6236 unique ayah identities');
+}
+for (const key of searchByAyah.keys()) {
+  if (!displayByAyah.has(key)) throw new Error(`[build] Missing display ayah for ${key}`);
+}
+for (const key of displayByAyah.keys()) {
+  if (!searchByAyah.has(key)) throw new Error(`[build] Missing search ayah for ${key}`);
+}
+
+const ibrahim = searchByAyah.get('2:124');
 if (!ibrahim || !ibrahim.text.includes('إبراهيم')) throw new Error('[build] Search corpus validation failed at 2:124: expected إبراهيم');
 
 const quranSearcher = createQuranSearcher(search, display);
@@ -55,7 +76,7 @@ const normalizedMatch = normalizedResults.find(x => Number(x.surahId) === 2 && N
 const hamzaMatch = hamzaResults.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124);
 if (!normalizedMatch) throw new Error('[build] Search query ابراهيم failed to find 2:124');
 if (!hamzaMatch) throw new Error('[build] Search query إبراهيم failed to find 2:124');
-const uthmani = display.find(x => Number(x.surahId) === 2 && Number(x.ayahId) === 124)?.text || '';
+const uthmani = displayByAyah.get('2:124')?.text || '';
 if (normalizedMatch.text !== uthmani) throw new Error('[build] Search result/display mapping failed');
 
 const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
