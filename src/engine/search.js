@@ -1,63 +1,48 @@
-const NORMALIZATION_VERSION = 3;
+const NORMALIZATION_VERSION = 4;
 
-// Search representation: ordinary Arabic, independent from the Uthmani display text.
-// Quranic signs that encode a real omitted search letter are handled explicitly.
-const SEARCH_CHAR_MAP = new Map([
+// SEARCH REPRESENTATION only: ordinary Arabic, independent from Uthmani display text.
+// The Uthmani corpus is never normalized into the search index at runtime.
+const CHAR_MAP = new Map([
   ['أ', 'ا'], ['إ', 'ا'], ['آ', 'ا'], ['ٱ', 'ا'], ['ٲ', 'ا'], ['ٳ', 'ا'], ['ٵ', 'ا'],
-  ['ى', 'ى'], ['ی', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ک', 'ك'],
+  ['ى', 'ى'], ['ی', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ک', 'ك']
 ]);
 
-const QURAN_MARKS = /[\u0610-\u061A\u064B-\u065F\u06D6-\u06E4\u06E8-\u06ED\uFEFF]/gu;
-const SEARCH_PUNCTUATION = /[\p{P}\p{S}]/gu;
+const MARKS = /[\u0610-\u061A\u064B-\u065F\u06D6-\u06ED\uFEFF]/gu;
+const PUNCTUATION = /[\p{P}\p{S}]/gu;
 const TATWEEL = /\u0640/gu;
 const WHITESPACE = /\s+/gu;
 
-function normalizeSearchText(value = '') {
-  const input = String(value ?? '').normalize('NFKC');
+export function normalizeArabic(value = '') {
   let out = '';
-
-  for (const ch of input) {
+  for (const ch of String(value ?? '').normalize('NFKC')) {
     if (ch === '\u0670') {
-      // Dagger alif after alif-maqsura is part of forms such as على/هدى/موسى;
-      // it does not create an extra alif in ordinary Arabic.
+      // Query convenience: copied Uthmani dagger alif becomes an ordinary alif.
       if (out.endsWith('ى')) continue;
       out += 'ا';
       continue;
     }
-
-    // High yeh in forms such as إِبْرَٰهِـۧمَ represents the omitted ordinary ي.
     if (ch === '\u06E7') {
+      // HIGH YEH in forms such as إِبْرَٰهِـۧمَ represents the ordinary search ي.
       out += 'ي';
       continue;
     }
-
-    // Small waw/yeh are pronunciation/reading signs here, not ordinary letters.
     if (ch === '\u06E5' || ch === '\u06E6') continue;
-    if (QURAN_MARKS.test(ch)) continue;
-
-    out += SEARCH_CHAR_MAP.get(ch) ?? ch;
+    if (MARKS.test(ch)) continue;
+    out += CHAR_MAP.get(ch) ?? ch;
   }
 
   return out
     .replace(TATWEEL, '')
-    .replace(SEARCH_PUNCTUATION, ' ')
+    .replace(PUNCTUATION, ' ')
     .replace(WHITESPACE, ' ')
     .trim();
 }
 
-export function normalizeArabic(value = '') {
-  return normalizeSearchText(value);
-}
-
-// Controlled fallback only. It is deliberately weaker than ordinary-Arabic matching.
-// It helps user-entered rasm variants such as ابراهيم / ابرهيم / ابراهم without
-// making the primary index itself lossy.
+// Secondary, deliberately weak fallback for user-entered spelling variants.
+// It is never used for the primary index and is only consulted when exact
+// ordinary-Arabic matching produces no candidate.
 export function orthographicKey(value = '') {
-  return normalizeSearchText(value).replace(/[اويى]/gu, '');
-}
-
-function finalYehVariant(value = '') {
-  return value.replace(/ى(?=\s|$)/gu, 'ي');
+  return normalizeArabic(value).replace(/[اويى]/gu, '');
 }
 
 function buildPostingMap(documents, field) {
@@ -73,15 +58,17 @@ function buildPostingMap(documents, field) {
   return postings;
 }
 
-export function buildSearchIndex(corpus = []) {
-  const documents = corpus.map((item, i) => {
+export function buildSearchIndex(searchCorpus = []) {
+  const documents = searchCorpus.map((item, i) => {
     const id = Number.isInteger(item?.globalNumber) ? item.globalNumber : i + 1;
-    const text = String(item?.text ?? '');
-    const normalized = normalizeArabic(text);
+    const normalized = normalizeArabic(item?.searchText ?? item?.text ?? '');
     const tokens = normalized.split(' ').filter(Boolean);
-    const finalYehTokens = tokens.map(finalYehVariant);
-    const relaxedTokens = tokens.map(orthographicKey).filter(Boolean);
-    return { id, normalized, tokens, finalYehTokens, relaxedTokens };
+    return {
+      id,
+      normalized,
+      tokens,
+      relaxedTokens: tokens.map(orthographicKey).filter(Boolean)
+    };
   });
 
   return {
@@ -89,32 +76,23 @@ export function buildSearchIndex(corpus = []) {
     documentCount: documents.length,
     documents,
     inverted: buildPostingMap(documents, 'tokens'),
-    finalYehInverted: buildPostingMap(documents, 'finalYehTokens'),
-    relaxedInverted: buildPostingMap(documents, 'relaxedTokens'),
+    relaxedInverted: buildPostingMap(documents, 'relaxedTokens')
   };
 }
 
-function intersectSorted(left, right) {
+function intersect(left, right) {
   const rightSet = new Set(right);
   return left.filter(id => rightSet.has(id));
 }
 
 function getCandidates(searchIndex, queryWords) {
-  let candidates = null;
+  let ids = null;
   let mode = 'exact';
 
   for (const word of queryWords) {
     const exact = searchIndex.inverted[word];
     if (exact?.length) {
-      candidates = candidates === null ? [...exact] : intersectSorted(candidates, exact);
-      continue;
-    }
-
-    const yehWord = finalYehVariant(word);
-    const yeh = searchIndex.finalYehInverted[yehWord];
-    if (yeh?.length) {
-      mode = 'final-yeh';
-      candidates = candidates === null ? [...yeh] : intersectSorted(candidates, yeh);
+      ids = ids === null ? [...exact] : intersect(ids, exact);
       continue;
     }
 
@@ -122,22 +100,25 @@ function getCandidates(searchIndex, queryWords) {
     const relaxed = relaxedWord ? searchIndex.relaxedInverted[relaxedWord] : null;
     if (relaxed?.length) {
       mode = 'relaxed';
-      candidates = candidates === null ? [...relaxed] : intersectSorted(candidates, relaxed);
+      ids = ids === null ? [...relaxed] : intersect(ids, relaxed);
       continue;
     }
 
     return { ids: [], mode };
   }
 
-  return { ids: candidates ?? [], mode };
+  return { ids: ids ?? [], mode };
 }
 
 function hasPhrase(tokens, queryWords) {
   if (!queryWords.length || queryWords.length > tokens.length) return false;
-  for (let i = 0; i <= tokens.length - queryWords.length; i++) {
+  for (let i = 0; i <= tokens.length - queryWords.length; i += 1) {
     let match = true;
-    for (let j = 0; j < queryWords.length; j++) {
-      if (tokens[i + j] !== queryWords[j]) { match = false; break; }
+    for (let j = 0; j < queryWords.length; j += 1) {
+      if (tokens[i + j] !== queryWords[j]) {
+        match = false;
+        break;
+      }
     }
     if (match) return true;
   }
@@ -145,45 +126,41 @@ function hasPhrase(tokens, queryWords) {
 }
 
 function rankDocument(document, query, queryWords, mode) {
-  const exactPhrase = hasPhrase(document.tokens, queryWords);
-  let score = document.normalized === query ? 3000 : exactPhrase ? 2000 : 1000;
-  if (mode === 'final-yeh') score -= 150;
-  if (mode === 'relaxed') score -= 350;
+  let score = document.normalized === query ? 3000 : hasPhrase(document.tokens, queryWords) ? 2000 : 1000;
+  if (mode === 'relaxed') score -= 500;
   return score;
 }
 
-export function createQuranSearcher(corpus = [], suppliedIndex = null) {
-  const searchIndex = suppliedIndex ?? buildSearchIndex(corpus);
-  const byId = new Map(corpus.map((item, i) => [
+export function createQuranSearcher(displayCorpus = [], suppliedIndex = null) {
+  const searchIndex = suppliedIndex ?? buildSearchIndex(displayCorpus);
+  const byId = new Map(displayCorpus.map((item, i) => [
     Number.isInteger(item?.globalNumber) ? item.globalNumber : i + 1,
-    item,
+    item
   ]));
   const documentById = new Map(searchIndex.documents.map(document => [document.id, document]));
 
-  function search(query = '') {
-    const normalizedQuery = normalizeArabic(query);
-    if (!normalizedQuery) return [];
-    const queryWords = normalizedQuery.split(' ').filter(Boolean);
-    const { ids, mode } = getCandidates(searchIndex, queryWords);
+  return {
+    search(query = '') {
+      const normalizedQuery = normalizeArabic(query);
+      if (!normalizedQuery) return [];
 
-    return ids
-      .map(id => {
-        const document = documentById.get(id);
-        const item = byId.get(id);
-        return document && item ? { item, score: rankDocument(document, normalizedQuery, queryWords, mode) } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.score - a.score || (a.item.globalNumber ?? 0) - (b.item.globalNumber ?? 0))
-      .map(({ item }) => item);
-  }
+      const queryWords = normalizedQuery.split(' ').filter(Boolean);
+      const { ids, mode } = getCandidates(searchIndex, queryWords);
 
-  return { search, index: searchIndex, normalizationVersion: NORMALIZATION_VERSION };
-}
-
-export function matchesSearchToken(displayToken, query) {
-  const normalizedQuery = normalizeArabic(query);
-  if (!normalizedQuery || normalizedQuery.includes(' ')) return false;
-  return normalizeArabic(displayToken).includes(normalizedQuery);
+      return ids
+        .map(id => {
+          const document = documentById.get(id);
+          const item = byId.get(id);
+          if (!document || !item) return null;
+          return { item, score: rankDocument(document, normalizedQuery, queryWords, mode) };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score || (a.item.globalNumber ?? 0) - (b.item.globalNumber ?? 0))
+        .map(({ item }) => item);
+    },
+    index: searchIndex,
+    normalizationVersion: NORMALIZATION_VERSION
+  };
 }
 
 export { NORMALIZATION_VERSION };
