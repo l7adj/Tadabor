@@ -93,7 +93,8 @@ export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
           matches.push({
             item: displayItem,
             score,
-            matchWordIndexes
+            matchWordIndexes,
+            matchWords: matchWordIndexes.map(index => entry.words[index])
           });
         }
       }
@@ -102,14 +103,52 @@ export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
         .sort((a, b) => b.score - a.score || Number(a.item.surahId) - Number(b.item.surahId) || Number(a.item.ayahId) - Number(b.item.ayahId))
         .map(match => ({
           ...match.item,
-          _matchWordIndexes: match.matchWordIndexes
+          _matchWordIndexes: match.matchWordIndexes,
+          _matchWords: match.matchWords
         }));
     }
   };
 }
 
+function editDistance(a, b) {
+  const aa = Array.from(a), bb = Array.from(b);
+  if (!aa.length) return bb.length;
+  if (!bb.length) return aa.length;
+  let prev = Array.from({ length: bb.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= aa.length; i += 1) {
+    const cur = [i];
+    for (let j = 1; j <= bb.length; j += 1) {
+      cur[j] = Math.min(
+        cur[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + (aa[i - 1] === bb[j - 1] ? 0 : 1)
+      );
+    }
+    prev = cur;
+  }
+  return prev[bb.length];
+}
+
 export function matchesSearchToken(displayToken, query) {
   const normalizedQuery = normalizeArabic(query);
   if (!normalizedQuery) return false;
-  return normalizeArabic(displayToken).includes(normalizedQuery);
+  const normalizedToken = normalizeArabic(displayToken);
+  if (normalizedToken.includes(normalizedQuery)) return true;
+  if (!normalizedToken || normalizedQuery.includes(' ')) return false;
+
+  // Allow small orthographic differences between the searchable spelling
+  // and the Uthmanic spelling, while keeping the highlight on the written
+  // Quran word itself.
+  const distance = editDistance(normalizedToken, normalizedQuery);
+  const limit = normalizedQuery.length >= 6 ? 1 : 0;
+  return distance <= limit;
+}
+
+// The result markup already uses <mark>. Override its visual treatment here
+// so the actual written Quran letters receive the search color, rather than
+// painting a background behind the word.
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = '.mark{background:transparent!important;color:#b91c1c!important;font-weight:800!important;padding:0!important}';
+  document.head.appendChild(style);
 }
