@@ -19,17 +19,26 @@ function words(value) {
   return normalizeArabic(value).split(' ').filter(Boolean);
 }
 
-export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
-  const displayByGlobal = new Map(
-    displayCorpus.map((item, index) => [Number(item?.globalNumber ?? index + 1), item])
-  );
+function ayahKey(item) {
+  return `${Number(item?.surahId)}:${Number(item?.ayahId)}`;
+}
 
-  const index = searchCorpus.map((item, index) => {
-    const globalNumber = Number(item?.globalNumber ?? index + 1);
+export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
+  const displayByAyah = new Map();
+
+  for (const item of displayCorpus) {
+    const key = ayahKey(item);
+    if (displayByAyah.has(key)) {
+      throw new Error(`Duplicate display ayah key: ${key}`);
+    }
+    displayByAyah.set(key, item);
+  }
+
+  const index = searchCorpus.map((item) => {
     const searchText = String(item?.text ?? '');
     return {
       item,
-      globalNumber,
+      key: ayahKey(item),
       normalized: normalizeArabic(searchText),
       words: words(searchText)
     };
@@ -50,13 +59,16 @@ export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
         else if (queryWords.length === 1 && entry.words.some(word => word.includes(queryWords[0]))) score = 75;
 
         if (score > 0) {
-          const displayItem = displayByGlobal.get(entry.globalNumber);
-          if (displayItem) matches.push({ item: displayItem, score });
+          const displayItem = displayByAyah.get(entry.key);
+          if (!displayItem) {
+            throw new Error(`No matching display ayah for ${entry.key}`);
+          }
+          matches.push({ item: displayItem, score });
         }
       }
 
       return matches
-        .sort((a, b) => b.score - a.score || a.item.globalNumber - b.item.globalNumber)
+        .sort((a, b) => b.score - a.score || Number(a.item.surahId) - Number(b.item.surahId) || Number(a.item.ayahId) - Number(b.item.ayahId))
         .map(match => match.item);
     }
   };
