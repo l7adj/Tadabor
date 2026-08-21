@@ -1,4 +1,4 @@
-const CACHE='tadabor-offline-v2';
+const CACHE='tadabor-offline-v3';
 const PRECACHE=[
   './',
   './index.html',
@@ -6,8 +6,10 @@ const PRECACHE=[
   './manifest.webmanifest',
   './offline-bridge.js',
   './src/data/quranData.json',
+  './src/data/searchData.json',
   './src/data/quranPages.json',
   './src/data/surahs.json',
+  './src/engine/search.js',
   './src/engine/mushaf.js'
 ];
 
