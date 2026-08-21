@@ -12,7 +12,6 @@ const RELAXED_CHAR_MAP = new Map([
   ['ة', 'ه'],
 ]);
 
-const DAGGER_ALIF = /\u0670/gu;
 const SEARCH_MARKS = /[\p{M}\uFEFF]/gu;
 const SEARCH_PUNCTUATION = /[\p{P}\p{S}]/gu;
 const TATWEEL = /\u0640/gu;
@@ -29,7 +28,6 @@ function canonicalize(value, map) {
     String(value ?? '')
       .normalize('NFKC')
       .replace(TATWEEL, '')
-      .replace(DAGGER_ALIF, 'ا')
       .replace(SEARCH_MARKS, '')
       .replace(SEARCH_PUNCTUATION, ' ')
       .replace(WHITESPACE, ' ')
