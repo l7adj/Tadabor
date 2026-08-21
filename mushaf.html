@@ -1,1 +1,83 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>تدبّر — المصحف المحلي</title><style>body{margin:0;background:#f5f0e6;color:#29251f;font-family:system-ui,sans-serif}main{max-width:980px;margin:auto;padding:12px}.bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}.bar button,.bar input{padding:8px;border:1px solid #cfc8bc;background:#fff;border-radius:8px}.page{max-width:760px;margin:12px auto;background:#fffdf8;border:1px solid #c9bfae;padding:18px 22px;min-height:72vh}.status{text-align:center;color:#786f64;padding:15px}@media(max-width:600px){.page{padding:12px 10px}}</style></head><body><main><div class="bar"><button id="prev">السابق</button><span><input id="page" type="number" min="1" max="604" value="1"><button id="go">اذهب</button></span><button id="next">التالي</button></div><div id="root" class="status">جاري فتح المصحف المحلي…</div></main><script type="module">import{MushafReader}from'./src/engine/mushaf.js';MushafReader.open({surah:1,ayah:1});</script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#14532d">
+<title>تدبّر — المصحف المحلي</title>
+<style>
+body{margin:0;background:#f5f0e6;color:#29251f;font-family:system-ui,sans-serif}
+main{max-width:980px;margin:auto;padding:12px 12px 32px}
+.bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:7px 0;background:#f5f0e6ee;backdrop-filter:blur(6px)}
+.bar button,.bar input{padding:8px;border:1px solid #cfc8bc;background:#fff;border-radius:8px;font:inherit}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.page{max-width:760px;margin:12px auto;background:#fffdf8;border:1px solid #c9bfae;padding:18px 22px;min-height:72vh}
+.status{text-align:center;color:#786f64;padding:15px}
+.error{padding:12px;background:#fff7ed;color:#9a3412;border-radius:10px}
+@media(max-width:600px){.page{padding:12px 10px}.actions{width:100%;justify-content:space-between}}
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <div class="actions">
+      <button id="back" type="button">← البحث</button>
+      <button id="copy" type="button">نسخ الآية</button>
+    </div>
+    <span>
+      <button id="prev" type="button">السابق</button>
+      <input id="page" type="number" min="1" max="604" value="1" aria-label="رقم الصفحة">
+      <button id="go" type="button">اذهب</button>
+      <button id="next" type="button">التالي</button>
+    </span>
+  </div>
+  <div id="root" class="status">جاري فتح المصحف المحلي…</div>
+</main>
+
+<script type="module">
+import { MushafReader } from './src/engine/mushaf.js';
+
+const params = new URLSearchParams(window.location.search);
+const surah = Number(params.get('surah'));
+const ayah = Number(params.get('ayah'));
+const query = params.get('q') || '';
+
+const reader = MushafReader;
+
+try {
+  if (Number.isInteger(surah) && Number.isInteger(ayah) && surah > 0 && ayah > 0) {
+    await reader.open({ surah, ayah });
+  } else {
+    await reader.open({ surah: 1, ayah: 1 });
+  }
+} catch (error) {
+  document.getElementById('root').innerHTML = '<div class="error">تعذر فتح المصحف المحلي.</div>';
+  console.error(error);
+}
+
+document.getElementById('back').addEventListener('click', () => {
+  window.location.href = `index.html${query ? `?q=${encodeURIComponent(query)}` : ''}`;
+});
+
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = await reader.getSelectedText();
+  if (!text) {
+    alert('لم يتم تحديد آية.');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('تم نسخ الآية');
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    alert('تم نسخ الآية');
+  }
+});
+</script>
+</body>
+</html>
