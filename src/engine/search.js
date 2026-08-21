@@ -4,12 +4,15 @@ export function normalizeArabic(value = '') {
     ['ى', 'ي'], ['ی', 'ي'], ['ئ', 'ي'], ['ؤ', 'و'], ['ۆ', 'و'], ['ک', 'ك'],
     ['ۀ', 'ه'], ['ە', 'ه'], ['ـ', ''],
     // Uthmani small letters represent underlying letters in the written text.
-    ['ۥ', 'و'], ['ۦ', 'ي']
+    ['ۥ', 'و'], ['ۦ', 'ي'], ['ۧ', 'ي'], ['ۨ', 'ن'], ['ۭ', 'ن']
   ]);
 
   let text = String(value)
     .normalize('NFKC')
     .replace(/\p{M}/gu, '')
+    // Quranic annotation marks that are not consistently classified as marks
+    // by every JavaScript Unicode implementation.
+    .replace(/[\u06D6-\u06E4\u06E9-\u06ED]/gu, '')
     .replace(/[\u060C\u061B\u061F\u066A-\u066D\u06D4\u00B7.,!?;:()[\]{}"'`~|/\\<>«»]/gu, ' ');
 
   let out = '';
@@ -135,20 +138,21 @@ export function matchesSearchToken(displayToken, query) {
   const normalizedQuery = normalizeArabic(query);
   if (!normalizedQuery) return false;
   const normalizedToken = normalizeArabic(displayToken);
-  if (normalizedToken.includes(normalizedQuery)) return true;
   if (!normalizedToken || normalizedQuery.includes(' ')) return false;
 
-  // Allow small orthographic differences between the searchable spelling
-  // and the Uthmanic spelling, while keeping the highlight on the written
-  // Quran word itself.
+  // Highlight is based on the normalized written word, not on the visible
+  // Uthmani glyph sequence. Thus ابرا continues to highlight إبراهيم even
+  // when the Uthmani word contains small letters/annotation marks.
+  if (normalizedToken.includes(normalizedQuery)) return true;
+  if (normalizedToken.startsWith(normalizedQuery)) return true;
+
+  // Only use edit distance for genuinely close full-word variants. Prefix
+  // matching above is the primary behavior for partial searches.
   const distance = editDistance(normalizedToken, normalizedQuery);
   const limit = normalizedQuery.length >= 6 ? 1 : 0;
   return distance <= limit;
 }
 
-// The result markup already uses <mark>. Override its visual treatment here
-// so the actual written Quran letters receive the search color, rather than
-// painting a background behind the word.
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = '.mark{background:transparent!important;color:#b91c1c!important;font-weight:800!important;padding:0!important}';
