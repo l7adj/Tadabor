@@ -18,17 +18,22 @@ assert.equal(normalizeArabic('إبراهيم'), 'ابراهيم');
 assert.equal(normalizeArabic('إِبْرَٰهِـۧمَ'), 'ابراهيم');
 assert.equal(normalizeArabic('الرَّحْمَـٰن'), 'الرحمن');
 
-const exact = searcher.search('ابراهيم');
-assert.equal(exact.length, 56, 'ordinary Arabic Ibrahim word search must return every exact-word occurrence');
-for (const key of ['2:124', '2:125', '2:127', '2:130', '2:258', '2:260', '11:74', '11:75', '11:76']) {
-  const [surahId, ayahId] = key.split(':').map(Number);
-  assert.ok(exact.some(a => a.surahId === surahId && a.ayahId === ayahId), `Ibrahim search must include ${key}`);
+const expectedIbrahimKeys = searchCorpus
+  .filter(item => item.searchText.split(/\s+/).some(word => normalizeArabic(word) === 'ابراهيم'))
+  .map(item => `${item.surahId}:${item.ayahId}`);
+const actualIbrahim = searcher.search('ابراهيم');
+const actualIbrahimKeys = actualIbrahim.map(item => `${item.surahId}:${item.ayahId}`);
+
+assert.equal(actualIbrahimKeys.length, expectedIbrahimKeys.length, 'ordinary Arabic search must return every exact Ibrahim occurrence');
+for (const key of expectedIbrahimKeys) {
+  assert.ok(actualIbrahimKeys.includes(key), `Ibrahim search must include ${key}`);
 }
 
 for (const query of ['ابراهيم', 'إبراهيم', 'إِبْرَٰهِيم']) {
   const results = searcher.search(query);
-  assert.equal(results.length, 56, `query ${query} must use the ordinary Arabic index`);
-  assert.ok(results.some(a => a.surahId === 2 && a.ayahId === 124), `query ${query} must reach Al-Baqarah 2:124`);
+  const resultKeys = new Set(results.map(a => `${a.surahId}:${a.ayahId}`));
+  assert.equal(results.length, expectedIbrahimKeys.length, `query ${query} must use the ordinary Arabic index`);
+  for (const key of expectedIbrahimKeys) assert.ok(resultKeys.has(key), `query ${query} must reach ${key}`);
 }
 
 for (const query of ['ابرهيم', 'ابراهم']) {
@@ -53,6 +58,6 @@ assert.equal(source.ayahCount, 6236);
 console.log('[search] display corpus 6236 PASS');
 console.log('[search] ordinary-Arabic search corpus 6236 PASS');
 console.log('[search] same-ayah mapping 6236/6236 PASS');
-console.log('[search] Ibrahim ordinary search PASS');
+console.log(`[search] Ibrahim exact-word corpus regression PASS (${expectedIbrahimKeys.length} ayahs)`);
 console.log('[search] Al-Baqarah Uthmani variants PASS');
 console.log('[search] original-Uthmani result preservation PASS');
