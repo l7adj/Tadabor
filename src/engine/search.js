@@ -50,6 +50,14 @@ function findMatchedWordIndexes(searchWords, queryWords) {
       for (let j = 0; j < queryWords.length; j += 1) indexes.push(i + j);
     }
   }
+
+  if (indexes.length) return [...new Set(indexes)];
+
+  // The score can also accept multi-word queries whose terms occur
+  // independently in the same ayah. Preserve every matched source position.
+  for (let i = 0; i < searchWords.length; i += 1) {
+    if (queryWords.some(queryWord => searchWords[i].includes(queryWord))) indexes.push(i);
+  }
   return [...new Set(indexes)];
 }
 
