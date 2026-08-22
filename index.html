@@ -1,1 +1,260 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14532d"><meta name="description" content="تدبّر — بحث القرآن وقراءة المصحف العثماني برواية حفص دون إنترنت"><title>تدبّر</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f0e6;color:#29251f;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:980px;margin:auto;padding:12px 8px 40px}button,input{font:inherit}.searchView h1{text-align:center;margin:4px 0 14px}.search{width:100%;padding:13px 46px 13px 14px;border:1px solid #d6d0c5;border-radius:12px;background:#fff;font-size:18px;outline:none}.meta{font-size:13px;color:#77716a;margin:8px 2px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.toolbar button,.readerBar button,.readerNav button,.ayahMenu button{border:1px solid #d2c9bb;background:#fff;border-radius:9px;padding:8px 11px}.result{background:#fff;border:1px solid #e4ded3;border-radius:12px;padding:12px 14px;margin:7px 0;cursor:pointer}.result:hover{background:#fffdf8}.ayah{font-family:"Noto Naskh Arabic","Amiri",serif;font-size:22px;line-height:1.95}.ref{font-size:12px;color:#78716c;margin-top:5px}.mark{background:#f4d35e;border-radius:3px;padding:0 2px}.empty,.loading{text-align:center;color:#78716c;padding:28px}.error{padding:12px;background:#fff7ed;color:#9a3412;border-radius:10px}.reader{display:none}.reader.active{display:block}.searchView.hidden{display:none}.readerTop{position:sticky;top:0;z-index:5;background:#f5f0e6ee;backdrop-filter:blur(6px);padding:6px 0 9px}.readerBar{display:flex;align-items:center;justify-content:space-between;gap:8px}.readerTitle{font-size:18px;font-weight:800}.mushaf{background:#fffdf8;border:1px solid #c9bfae;border-radius:4px;padding:18px 14px 28px;box-shadow:0 1px 4px #00000012;min-height:76vh}.pageHead,.pageFoot{display:flex;justify-content:space-between;color:#71685d;font-size:11px;border-bottom:1px solid #e7dfd2;padding:7px 0}.pageFoot{border-top:1px solid #e7dfd2;border-bottom:0;margin-top:16px}.surahTitle{text-align:center;font-family:"Noto Naskh Arabic","Amiri",serif;font-size:27px;font-weight:800;margin:6px 0 12px}.basmala{text-align:center;font-family:"Noto Naskh Arabic","Amiri",serif;font-size:24px;margin-bottom:15px}.surahText{font-family:"Noto Naskh Arabic","Amiri",serif;font-size:25px;line-height:2.35;text-align:justify;direction:rtl}.ayahInline{display:inline;border-radius:6px;padding:2px 3px;scroll-margin-top:80px;cursor:pointer}.ayahInline:hover{background:#f7f0d6}.ayahInline.selected{background:#fff0a8;box-shadow:inset 0 0 0 1px #e0bd43}.ayahNum{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #b9a98d;border-radius:50%;font-family:system-ui,sans-serif;font-size:11px;vertical-align:middle;margin:0 5px;color:#6b5b43}.readerNav{display:flex;gap:8px;margin:9px 0}.readerNav button{flex:1}.hint{text-align:center;color:#81796f;font-size:12px;margin:8px 0}.ayahMenu{display:none;position:fixed;z-index:20;background:#fff;border:1px solid #d8d0c4;border-radius:10px;padding:6px;box-shadow:0 5px 20px #0002}.ayahMenu.show{display:block}@media(max-width:600px){main{padding:8px 6px 32px}.mushaf{padding:12px 9px 22px}.surahText{font-size:22px;line-height:2.1}.ayahNum{width:25px;height:25px;font-size:10px}}</style></head><body><main><section id="searchView" class="searchView"><h1>تدبّر</h1><input id="q" class="search" autocomplete="off" placeholder="اكتب كلمة أو عبارة من القرآن…"><div class="toolbar"><button id="clear">مسح</button></div><div id="meta" class="meta"></div><div id="results"><div class="loading">جاري تجهيز القرآن المحلي…</div></div></section><section id="reader" class="reader"><div class="readerTop"><div class="readerBar"><button id="back">← البحث</button><div id="readerTitle" class="readerTitle"></div><button id="copySelected">نسخ الآية</button></div></div><div class="readerNav"><button id="prevPage">الصفحة السابقة</button><button id="nextPage">الصفحة التالية</button></div><div id="readerContent"></div><div class="hint">المصحف محفوظ داخل التطبيق — اضغط الآية لتحديدها ثم نسخها.</div></section><div id="ayahMenu" class="ayahMenu"><button id="menuCopy">نسخ الآية</button></div></main><script type="module">import {createQuranSearcher,matchesSearchToken} from './src/engine/search.js';const QURAN_URL='./src/data/quranData.json',SEARCH_URL='./src/data/searchData.json',PAGES_URL='./src/data/quranPages.json',SURAHS_URL='./src/data/surahs.json';const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let displayCorpus=[],quranSearcher=null,pages={},surahs=[],selected=-1,readerPage=1,savedScroll=0;const input=document.getElementById('q'),resultsEl=document.getElementById('results'),meta=document.getElementById('meta'),searchView=document.getElementById('searchView'),reader=document.getElementById('reader'),readerTitle=document.getElementById('readerTitle'),readerContent=document.getElementById('readerContent'),menu=document.getElementById('ayahMenu');function byGlobal(g){return displayCorpus[g-1]}function highlight(t,q){return t.split(/(\s+)/).map(x=>/^\s+$/.test(x)?x:(matchesSearchToken(x,q)?'<mark class="mark">'+esc(x)+'</mark>':esc(x))).join('')}function results(){const r=quranSearcher?quranSearcher.search(input.value):[];meta.textContent=input.value.trim()?`${r.length} آية مطابقة`:`جاهز — ${displayCorpus.length} آية`;if(!input.value.trim()){resultsEl.innerHTML='<div class="empty">اكتب كلمة أو عبارة للبحث.</div>';return}if(!r.length){resultsEl.innerHTML='<div class="empty">لا توجد مطابقة.</div>';return}resultsEl.innerHTML=r.slice(0,150).map(a=>`<article class="result" data-open="${a.globalNumber}"><div class="ayah">${highlight(a.text,input.value)}</div><div class="ref">سورة ${esc(surahs[a.surahId-1]?.name||a.surahId)} — الآية ${a.ayahId} • صفحة ${a.page}</div></article>`).join('');resultsEl.querySelectorAll('[data-open]').forEach(x=>x.onclick=()=>openReader(Number(x.dataset.open)))}function pageForGlobal(g){const s=pages.pageStarts;let lo=0,hi=s.length-1,b=0;while(lo<=hi){const m=(lo+hi)>>1;if(s[m]<=g){b=m;lo=m+1}else hi=m-1}return b+1}function globalsForPage(p){const s=pages.pageStarts[p-1]||1,e=(pages.pageStarts[p]||displayCorpus.length+1)-1,a=[];for(let g=s;g<=e;g++)a.push(g);return a}function renderPage(p,focus){readerPage=Math.max(1,Math.min(604,p));const ayahs=globalsForPage(readerPage).map(byGlobal).filter(Boolean),first=ayahs[0],last=ayahs[ayahs.length-1],surah=first?surahs[first.surahId-1]:null;readerTitle.textContent=surah?`سورة ${surah.name}`:`صفحة ${readerPage}`;let h='<div class="mushaf"><div class="pageHead"><span>مصحف حفص</span><strong>صفحة '+readerPage+' من 604</strong><span>'+esc(surah?.name||'')+'</span></div>';if(first&&(first.ayahId===1||readerPage===1)&&first.surahId!==9)h+='<div class="surahTitle">سورة '+esc(surah?.name||'')+'</div><div class="basmala">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>';h+='<div class="surahText">';for(const a of ayahs)h+=`<span id="ayah-${a.globalNumber}" class="ayahInline${a.globalNumber===focus?' selected':''}" data-global="${a.globalNumber}">${esc(a.text)} <span class="ayahNum">${a.ayahId}</span></span> `;h+='</div><div class="pageFoot"><span>﴿ '+(first?`${first.surahId}:${first.ayahId}`:'')+' — '+(last?`${last.surahId}:${last.ayahId}`:'')+' ﴾</span><span>تدبّر • حفص</span></div></div>';readerContent.innerHTML=h;readerContent.querySelectorAll('[data-global]').forEach(el=>el.onclick=e=>selectAyah(Number(el.dataset.global),e));if(focus)requestAnimationFrame(()=>document.getElementById('ayah-'+focus)?.scrollIntoView({behavior:'smooth',block:'center'}))}function openReader(g){selected=g;savedScroll=scrollY;searchView.classList.add('hidden');reader.classList.add('active');renderPage(pageForGlobal(g),g)}function selectAyah(g,e){selected=g;readerContent.querySelectorAll('.ayahInline.selected').forEach(x=>x.classList.remove('selected'));document.getElementById('ayah-'+g)?.classList.add('selected');menu.style.left=(e.clientX||20)+'px';menu.style.top=(e.clientY||80)+'px';menu.classList.add('show')}async function copySelected(){const a=byGlobal(selected);if(!a)return;const text=`﴿${a.text}﴾ [سورة ${surahs[a.surahId-1]?.name||a.surahId}: الآية ${a.ayahId}]`;try{await navigator.clipboard.writeText(text)}catch{const x=document.createElement('textarea');x.value=text;document.body.appendChild(x);x.select();document.execCommand('copy');x.remove()}}function closeReader(){menu.classList.remove('show');reader.classList.remove('active');searchView.classList.remove('hidden');results();requestAnimationFrame(()=>scrollTo(0,savedScroll))}input.oninput=results;document.getElementById('clear').onclick=()=>{input.value='';results()};document.getElementById('back').onclick=closeReader;document.getElementById('copySelected').onclick=copySelected;document.getElementById('menuCopy').onclick=()=>{copySelected();menu.classList.remove('show')};document.getElementById('prevPage').onclick=()=>{if(readerPage>1)renderPage(readerPage-1,selected)};document.getElementById('nextPage').onclick=()=>{if(readerPage<604)renderPage(readerPage+1,selected)};document.addEventListener('click',e=>{if(!e.target.closest('.ayahMenu')&&!e.target.closest('.ayahInline'))menu.classList.remove('show')});function pageForGlobalLocal(s,g){let lo=0,hi=s.length-1,b=0;while(lo<=hi){const m=(lo+hi)>>1;if(s[m]<=g){b=m;lo=m+1}else hi=m-1}return b+1}Promise.all([fetch(SEARCH_URL).then(r=>{if(!r.ok)throw Error('searchData');return r.json()}),fetch(QURAN_URL).then(r=>{if(!r.ok)throw Error('quranData');return r.json()}),fetch(PAGES_URL).then(r=>{if(!r.ok)throw Error('quranPages');return r.json()}),fetch(SURAHS_URL).then(r=>{if(!r.ok)throw Error('surahs');return r.json()})]).then(([searchData,q,p,s])=>{displayCorpus=q.map((a,i)=>({globalNumber:i+1,surahId:a.surahId,ayahId:a.ayahId,text:a.text,page:pageForGlobalLocal(p.pageStarts,i+1)}));pages=p;surahs=s;if(searchData.length!==6236||displayCorpus.length!==6236)throw Error('Quran layers must contain 6236 ayahs');quranSearcher=createQuranSearcher(searchData,displayCorpus);results()}).catch(e=>{console.error(e);resultsEl.innerHTML='<div class="error">تعذر تجهيز طبقتي القرآن المحلية للبحث والعرض.</div>'});</script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#14532d">
+  <meta name="description" content="تدبّر — بحث القرآن وقراءة المصحف العثماني برواية حفص دون إنترنت">
+  <title>تدبّر</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f5f0e6;color:#29251f;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{max-width:980px;margin:auto;padding:12px 8px 40px}button,input{font:inherit}.searchView h1{text-align:center;margin:4px 0 14px}
+    .search{width:100%;padding:13px 46px 13px 14px;border:1px solid #d6d0c5;border-radius:12px;background:#fff;font-size:18px;outline:none}
+    .meta{font-size:13px;color:#77716a;margin:8px 2px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .toolbar button,.readerBar button,.readerNav button,.ayahMenu button{border:1px solid #d2c9bb;background:#fff;border-radius:9px;padding:8px 11px}
+    .result{background:#fff;border:1px solid #e4ded3;border-radius:12px;padding:12px 14px;margin:7px 0;cursor:pointer}.result:hover{background:#fffdf8}
+    .ayah{font-family:"Noto Naskh Arabic","Amiri",serif;font-size:22px;line-height:1.95}.ref{font-size:12px;color:#78716c;margin-top:5px}
+    .mark{background:#f4d35e;border-radius:3px;padding:0 2px}.empty,.loading{text-align:center;color:#78716c;padding:28px}.error{padding:12px;background:#fff7ed;color:#9a3412;border-radius:10px}
+    .reader{display:none}.reader.active{display:block}.searchView.hidden{display:none}.readerTop{position:sticky;top:0;z-index:5;background:#f5f0e6ee;backdrop-filter:blur(6px);padding:6px 0 9px}
+    .readerBar{display:flex;align-items:center;justify-content:space-between;gap:8px}.readerTitle{font-size:18px;font-weight:800}.mushaf{background:#fffdf8;border:1px solid #c9bfae;border-radius:4px;padding:18px 14px 28px;box-shadow:0 1px 4px #00000012;min-height:76vh}
+    .pageHead,.pageFoot{display:flex;justify-content:space-between;color:#71685d;font-size:11px;border-bottom:1px solid #e7dfd2;padding:7px 0}.pageFoot{border-top:1px solid #e7dfd2;border-bottom:0;margin-top:16px}
+    .surahTitle{text-align:center;font-family:"Noto Naskh Arabic","Amiri",serif;font-size:27px;font-weight:800;margin:6px 0 12px}.basmala{text-align:center;font-family:"Noto Naskh Arabic","Amiri",serif;font-size:24px;margin-bottom:15px}
+    .surahText{font-family:"Noto Naskh Arabic","Amiri",serif;font-size:25px;line-height:2.35;text-align:justify;direction:rtl}.ayahInline{display:inline;border-radius:6px;padding:2px 3px;scroll-margin-top:80px;cursor:pointer}
+    .ayahInline:hover{background:#f7f0d6}.ayahInline.selected{background:#fff0a8;box-shadow:inset 0 0 0 1px #e0bd43}.ayahNum{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #b9a98d;border-radius:50%;font-family:system-ui,sans-serif;font-size:11px;vertical-align:middle;margin:0 5px;color:#6b5b43}
+    .readerNav{display:flex;gap:8px;margin:9px 0}.readerNav button{flex:1}.hint{text-align:center;color:#81796f;font-size:12px;margin:8px 0}
+    .ayahMenu{display:none;position:fixed;z-index:20;background:#fff;border:1px solid #d8d0c4;border-radius:10px;padding:6px;box-shadow:0 5px 20px #0002}.ayahMenu.show{display:block}
+    @media(max-width:600px){main{padding:8px 6px 32px}.mushaf{padding:12px 9px 22px}.surahText{font-size:22px;line-height:2.1}.ayahNum{width:25px;height:25px;font-size:10px}}
+  </style>
+</head>
+<body>
+  <main>
+    <section id="searchView" class="searchView">
+      <h1>تدبّر</h1>
+      <input id="q" class="search" autocomplete="off" placeholder="اكتب كلمة أو عبارة من القرآن…">
+      <div class="toolbar"><button id="clear">مسح</button></div>
+      <div id="meta" class="meta"></div>
+      <div id="results"><div class="loading">جاري تجهيز القرآن المحلي…</div></div>
+    </section>
+
+    <section id="reader" class="reader">
+      <div class="readerTop"><div class="readerBar"><button id="back">← البحث</button><div id="readerTitle" class="readerTitle"></div><button id="copySelected">نسخ الآية</button></div></div>
+      <div class="readerNav"><button id="prevPage">الصفحة السابقة</button><button id="nextPage">الصفحة التالية</button></div>
+      <div id="readerContent"></div>
+      <div class="hint">المصحف محفوظ داخل التطبيق — اضغط الآية لتحديدها ثم نسخها.</div>
+    </section>
+
+    <div id="ayahMenu" class="ayahMenu"><button id="menuCopy">نسخ الآية</button></div>
+  </main>
+
+  <script type="module">
+    import { createQuranSearcher } from './src/engine/search.js';
+
+    const QURAN_URL = './src/data/quranData.json';
+    const SEARCH_URL = './src/data/searchData.json';
+    const PAGES_URL = './src/data/quranPages.json';
+    const SURAHS_URL = './src/data/surahs.json';
+
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+
+    let displayCorpus = [];
+    let quranSearcher = null;
+    let pages = {};
+    let surahs = [];
+    let selected = -1;
+    let readerPage = 1;
+    let savedScroll = 0;
+
+    const input = document.getElementById('q');
+    const resultsEl = document.getElementById('results');
+    const meta = document.getElementById('meta');
+    const searchView = document.getElementById('searchView');
+    const reader = document.getElementById('reader');
+    const readerTitle = document.getElementById('readerTitle');
+    const readerContent = document.getElementById('readerContent');
+    const menu = document.getElementById('ayahMenu');
+
+    function byGlobal(g) {
+      return displayCorpus[g - 1];
+    }
+
+    function highlightByWordIndexes(text, matchWordIndexes = []) {
+      const indexes = new Set(matchWordIndexes.map(Number));
+      let wordIndex = 0;
+      return String(text).split(/(\s+)/u).map(part => {
+        if (/^\s+$/u.test(part)) return part;
+        const html = indexes.has(wordIndex)
+          ? '<mark class="mark">' + esc(part) + '</mark>'
+          : esc(part);
+        wordIndex += 1;
+        return html;
+      }).join('');
+    }
+
+    function results() {
+      const r = quranSearcher ? quranSearcher.search(input.value) : [];
+      meta.textContent = input.value.trim() ? `${r.length} آية مطابقة` : `جاهز — ${displayCorpus.length} آية`;
+
+      if (!input.value.trim()) {
+        resultsEl.innerHTML = '<div class="empty">اكتب كلمة أو عبارة للبحث.</div>';
+        return;
+      }
+
+      if (!r.length) {
+        resultsEl.innerHTML = '<div class="empty">لا توجد مطابقة.</div>';
+        return;
+      }
+
+      resultsEl.innerHTML = r.slice(0, 150).map(a => `
+        <article class="result" data-open="${a.globalNumber}">
+          <div class="ayah">${highlightByWordIndexes(a.text, a._matchWordIndexes)}</div>
+          <div class="ref">سورة ${esc(surahs[a.surahId - 1]?.name || a.surahId)} — الآية ${a.ayahId} • صفحة ${a.page}</div>
+        </article>
+      `).join('');
+
+      resultsEl.querySelectorAll('[data-open]').forEach(x => {
+        x.onclick = () => openReader(Number(x.dataset.open));
+      });
+    }
+
+    function pageForGlobal(g) {
+      const s = pages.pageStarts;
+      let lo = 0, hi = s.length - 1, b = 0;
+      while (lo <= hi) {
+        const m = (lo + hi) >> 1;
+        if (s[m] <= g) { b = m; lo = m + 1; }
+        else hi = m - 1;
+      }
+      return b + 1;
+    }
+
+    function globalsForPage(p) {
+      const s = pages.pageStarts;
+      const start = s[p - 1] || 1;
+      const end = (s[p] || displayCorpus.length + 1) - 1;
+      const a = [];
+      for (let g = start; g <= end; g++) a.push(g);
+      return a;
+    }
+
+    function renderPage(p, focus) {
+      readerPage = Math.max(1, Math.min(604, p));
+      const ayahs = globalsForPage(readerPage).map(byGlobal).filter(Boolean);
+      const first = ayahs[0];
+      const last = ayahs[ayahs.length - 1];
+      const surah = first ? surahs[first.surahId - 1] : null;
+
+      readerTitle.textContent = surah ? `سورة ${surah.name}` : `صفحة ${readerPage}`;
+      let h = '<div class="mushaf"><div class="pageHead"><span>مصحف حفص</span><strong>صفحة ' + readerPage + ' من 604</strong><span>' + esc(surah?.name || '') + '</span></div>';
+
+      if (first && (first.ayahId === 1 || readerPage === 1) && first.surahId !== 9) {
+        h += '<div class="surahTitle">سورة ' + esc(surah?.name || '') + '</div><div class="basmala">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</div>';
+      }
+
+      h += '<div class="surahText">';
+      for (const a of ayahs) {
+        h += `<span id="ayah-${a.globalNumber}" class="ayahInline${a.globalNumber === focus ? ' selected' : ''}" data-global="${a.globalNumber}">${esc(a.text)} <span class="ayahNum">${a.ayahId}</span></span> `;
+      }
+      h += '</div><div class="pageFoot"><span>﴿ ' + (first ? `${first.surahId}:${first.ayahId}` : '') + ' — ' + (last ? `${last.surahId}:${last.ayahId}` : '') + ' ﴾</span><span>تدبّر • حفص</span></div></div>';
+
+      readerContent.innerHTML = h;
+      readerContent.querySelectorAll('[data-global]').forEach(el => {
+        el.onclick = e => selectAyah(Number(el.dataset.global), e);
+      });
+
+      if (focus) requestAnimationFrame(() => document.getElementById('ayah-' + focus)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    }
+
+    function openReader(g) {
+      selected = g;
+      savedScroll = scrollY;
+      searchView.classList.add('hidden');
+      reader.classList.add('active');
+      renderPage(pageForGlobal(g), g);
+    }
+
+    function selectAyah(g, e) {
+      selected = g;
+      readerContent.querySelectorAll('.ayahInline.selected').forEach(x => x.classList.remove('selected'));
+      document.getElementById('ayah-' + g)?.classList.add('selected');
+      menu.style.left = (e.clientX || 20) + 'px';
+      menu.style.top = (e.clientY || 80) + 'px';
+      menu.classList.add('show');
+    }
+
+    async function copySelected() {
+      const a = byGlobal(selected);
+      if (!a) return;
+      const text = `﴿${a.text}﴾ [سورة ${surahs[a.surahId - 1]?.name || a.surahId}: الآية ${a.ayahId}]`;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const x = document.createElement('textarea');
+        x.value = text;
+        document.body.appendChild(x);
+        x.select();
+        document.execCommand('copy');
+        x.remove();
+      }
+    }
+
+    function closeReader() {
+      menu.classList.remove('show');
+      reader.classList.remove('active');
+      searchView.classList.remove('hidden');
+      results();
+      requestAnimationFrame(() => scrollTo(0, savedScroll));
+    }
+
+    input.oninput = results;
+    document.getElementById('clear').onclick = () => { input.value = ''; results(); };
+    document.getElementById('back').onclick = closeReader;
+    document.getElementById('copySelected').onclick = copySelected;
+    document.getElementById('menuCopy').onclick = () => { copySelected(); menu.classList.remove('show'); };
+    document.getElementById('prevPage').onclick = () => { if (readerPage > 1) renderPage(readerPage - 1, selected); };
+    document.getElementById('nextPage').onclick = () => { if (readerPage < 604) renderPage(readerPage + 1, selected); };
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.ayahMenu') && !e.target.closest('.ayahInline')) menu.classList.remove('show');
+    });
+
+    function pageForGlobalLocal(s, g) {
+      let lo = 0, hi = s.length - 1, b = 0;
+      while (lo <= hi) {
+        const m = (lo + hi) >> 1;
+        if (s[m] <= g) { b = m; lo = m + 1; }
+        else hi = m - 1;
+      }
+      return b + 1;
+    }
+
+    Promise.all([
+      fetch(SEARCH_URL).then(r => { if (!r.ok) throw Error('searchData'); return r.json(); }),
+      fetch(QURAN_URL).then(r => { if (!r.ok) throw Error('quranData'); return r.json(); }),
+      fetch(PAGES_URL).then(r => { if (!r.ok) throw Error('quranPages'); return r.json(); }),
+      fetch(SURAHS_URL).then(r => { if (!r.ok) throw Error('surahs'); return r.json(); })
+    ]).then(([searchData, q, p, s]) => {
+      displayCorpus = q.map((a, i) => ({
+        globalNumber: i + 1,
+        surahId: a.surahId,
+        ayahId: a.ayahId,
+        text: a.text,
+        page: pageForGlobalLocal(p.pageStarts, i + 1)
+      }));
+
+      pages = p;
+      surahs = s;
+
+      if (searchData.length !== 6236 || displayCorpus.length !== 6236) {
+        throw Error('Quran layers must contain 6236 ayahs');
+      }
+
+      quranSearcher = createQuranSearcher(searchData, displayCorpus);
+      results();
+    }).catch(e => {
+      console.error(e);
+      resultsEl.innerHTML = '<div class="error">تعذر تجهيز طبقتي القرآن المحلية للبحث والعرض.</div>';
+    });
+  </script>
+</body>
+</html>
