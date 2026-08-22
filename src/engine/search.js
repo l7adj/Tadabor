@@ -115,44 +115,6 @@ export function createQuranSearcher(searchCorpus = [], displayCorpus = []) {
   };
 }
 
-function editDistance(a, b) {
-  const aa = Array.from(a), bb = Array.from(b);
-  if (!aa.length) return bb.length;
-  if (!bb.length) return aa.length;
-  let prev = Array.from({ length: bb.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= aa.length; i += 1) {
-    const cur = [i];
-    for (let j = 1; j <= bb.length; j += 1) {
-      cur[j] = Math.min(
-        cur[j - 1] + 1,
-        prev[j] + 1,
-        prev[j - 1] + (aa[i - 1] === bb[j - 1] ? 0 : 1)
-      );
-    }
-    prev = cur;
-  }
-  return prev[bb.length];
-}
-
-export function matchesSearchToken(displayToken, query) {
-  const normalizedQuery = normalizeArabic(query);
-  if (!normalizedQuery) return false;
-  const normalizedToken = normalizeArabic(displayToken);
-  if (!normalizedToken || normalizedQuery.includes(' ')) return false;
-
-  // Highlight is based on the normalized written word, not on the visible
-  // Uthmani glyph sequence. Thus ابرا continues to highlight إبراهيم even
-  // when the Uthmani word contains small letters/annotation marks.
-  if (normalizedToken.includes(normalizedQuery)) return true;
-  if (normalizedToken.startsWith(normalizedQuery)) return true;
-
-  // Only use edit distance for genuinely close full-word variants. Prefix
-  // matching above is the primary behavior for partial searches.
-  const distance = editDistance(normalizedToken, normalizedQuery);
-  const limit = normalizedQuery.length >= 6 ? 1 : 0;
-  return distance <= limit;
-}
-
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = '.mark{background:transparent!important;color:#b91c1c!important;font-weight:800!important;padding:0!important}';
